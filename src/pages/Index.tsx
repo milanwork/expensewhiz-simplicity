@@ -3,9 +3,11 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
 import { FileText, CreditCard, BarChart3, Globe, ChevronRight } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
 
 const Index = () => {
   const [isHovered, setIsHovered] = useState(false);
+  const navigate = useNavigate();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
@@ -14,13 +16,13 @@ const Index = () => {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center">
-              <span className="font-display text-xl font-bold text-gray-900">ExpenseWhiz</span>
+              <Link to="/" className="font-display text-xl font-bold text-gray-900">ExpenseWhiz</Link>
             </div>
             <div className="hidden md:flex items-center space-x-4">
               <a href="#features" className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium">Features</a>
               <a href="#pricing" className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium">Pricing</a>
-              <Button variant="outline" className="ml-4">Sign in</Button>
-              <Button>Register</Button>
+              <Button variant="outline" className="ml-4" onClick={() => navigate("/auth")}>Sign in</Button>
+              <Button onClick={() => navigate("/auth", { state: { register: true } })}>Register</Button>
             </div>
           </div>
         </div>
