@@ -9,6 +9,11 @@ const Index = () => {
   const [isHovered, setIsHovered] = useState(false);
   const navigate = useNavigate();
 
+  // Updated to always pass register: true state when navigating to auth for registration
+  const handleRegistration = () => {
+    navigate("/auth", { state: { register: true } });
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-white to-gray-50">
       {/* Navigation */}
@@ -22,7 +27,7 @@ const Index = () => {
               <a href="#features" className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium">Features</a>
               <a href="#pricing" className="text-gray-600 hover:text-gray-900 px-3 py-2 text-sm font-medium">Pricing</a>
               <Button variant="outline" className="ml-4" onClick={() => navigate("/auth")}>Sign in</Button>
-              <Button onClick={() => navigate("/auth", { state: { register: true } })}>Register</Button>
+              <Button onClick={handleRegistration}>Register</Button>
             </div>
           </div>
         </div>
@@ -47,6 +52,7 @@ const Index = () => {
             className="group relative overflow-hidden"
             onMouseEnter={() => setIsHovered(true)}
             onMouseLeave={() => setIsHovered(false)}
+            onClick={handleRegistration}
           >
             Let's Get Started
             <ChevronRight className={`ml-2 transition-transform duration-300 ${isHovered ? 'transform translate-x-1' : ''}`} />
