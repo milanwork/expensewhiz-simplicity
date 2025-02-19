@@ -182,6 +182,120 @@ export type Database = {
           },
         ]
       }
+      invoice_items: {
+        Row: {
+          amount: number
+          category: string | null
+          created_at: string
+          description: string | null
+          id: string
+          invoice_id: string
+          job: string | null
+          tax_code: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invoice_id: string
+          job?: string | null
+          tax_code?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          invoice_id?: string
+          job?: string | null
+          tax_code?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      invoices: {
+        Row: {
+          amount_paid: number
+          balance_due: number
+          business_id: string
+          created_at: string
+          customer_id: string
+          customer_po_number: string | null
+          due_date: string
+          freight_amount: number | null
+          id: string
+          invoice_number: string
+          is_tax_inclusive: boolean | null
+          issue_date: string
+          notes: string | null
+          status: Database["public"]["Enums"]["invoice_status"] | null
+          subtotal: number
+          tax: number
+          total: number
+          updated_at: string
+        }
+        Insert: {
+          amount_paid?: number
+          balance_due?: number
+          business_id: string
+          created_at?: string
+          customer_id: string
+          customer_po_number?: string | null
+          due_date: string
+          freight_amount?: number | null
+          id?: string
+          invoice_number: string
+          is_tax_inclusive?: boolean | null
+          issue_date: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"] | null
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Update: {
+          amount_paid?: number
+          balance_due?: number
+          business_id?: string
+          created_at?: string
+          customer_id?: string
+          customer_po_number?: string | null
+          due_date?: string
+          freight_amount?: number | null
+          id?: string
+          invoice_number?: string
+          is_tax_inclusive?: boolean | null
+          issue_date?: string
+          notes?: string | null
+          status?: Database["public"]["Enums"]["invoice_status"] | null
+          subtotal?: number
+          tax?: number
+          total?: number
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "business_profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -220,7 +334,7 @@ export type Database = {
       }
     }
     Enums: {
-      [_ in never]: never
+      invoice_status: "draft" | "sent" | "paid" | "overdue" | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
