@@ -137,7 +137,7 @@ const Profile = () => {
       // Check if business profile exists
       const { data: existingProfile } = await supabase
         .from("business_profiles")
-        .select("id")
+        .select("id, client_id")
         .eq("user_id", user.id)
         .single();
 
@@ -146,6 +146,8 @@ const Profile = () => {
         user_id: user.id,
         business_name: businessName,
         abn_acn: abnAcn,
+        // Keep existing client_id if updating, let DB generate if new
+        client_id: existingProfile?.client_id,
         address_line1: addressLine1,
         address_line2: addressLine2,
         city: city,
@@ -155,13 +157,18 @@ const Profile = () => {
         updated_at: new Date().toISOString(),
       };
 
-      let { error: businessError } = await supabase
+      let { data: updatedBusiness, error: businessError } = await supabase
         .from("business_profiles")
         .upsert(businessUpdates, {
           onConflict: 'user_id'
         });
 
       if (businessError) throw businessError;
+      
+      // Update client ID in UI after successful creation/update
+      if (updatedBusiness && updatedBusiness[0]?.client_id) {
+        setClientId(updatedBusiness[0].client_id);
+      }
       
       toast({
         title: "Profile updated!",

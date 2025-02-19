@@ -16,7 +16,7 @@ export type Database = {
           address_line2: string | null
           business_name: string | null
           city: string | null
-          client_id: string | null
+          client_id: string
           country: string | null
           created_at: string
           id: string
@@ -31,7 +31,7 @@ export type Database = {
           address_line2?: string | null
           business_name?: string | null
           city?: string | null
-          client_id?: string | null
+          client_id?: string
           country?: string | null
           created_at?: string
           id?: string
@@ -46,7 +46,7 @@ export type Database = {
           address_line2?: string | null
           business_name?: string | null
           city?: string | null
-          client_id?: string | null
+          client_id?: string
           country?: string | null
           created_at?: string
           id?: string
@@ -89,7 +89,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      generate_client_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never
