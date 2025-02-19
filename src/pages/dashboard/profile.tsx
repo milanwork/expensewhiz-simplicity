@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -27,7 +28,7 @@ interface BusinessProfile {
   id: string;
   business_name: string | null;
   abn_acn: string | null;
-  client_id: string | null;
+  client_id: string;
   address_line1: string | null;
   address_line2: string | null;
   city: string | null;
@@ -146,7 +147,6 @@ const Profile = () => {
         user_id: user.id,
         business_name: businessName,
         abn_acn: abnAcn,
-        // Keep existing client_id if updating, let DB generate if new
         client_id: existingProfile?.client_id,
         address_line1: addressLine1,
         address_line2: addressLine2,
@@ -161,12 +161,13 @@ const Profile = () => {
         .from("business_profiles")
         .upsert(businessUpdates, {
           onConflict: 'user_id'
-        });
+        })
+        .select() as { data: BusinessProfile[] | null, error: any };
 
       if (businessError) throw businessError;
       
       // Update client ID in UI after successful creation/update
-      if (updatedBusiness && updatedBusiness[0]?.client_id) {
+      if (updatedBusiness && updatedBusiness[0]) {
         setClientId(updatedBusiness[0].client_id);
       }
       
