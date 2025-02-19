@@ -115,9 +115,19 @@ export default function ContactForm() {
         if (error) throw error;
         toast({ title: "Success", description: "Contact updated successfully" });
       } else {
+        // Get the current user's ID
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) throw new Error('No authenticated user');
+
+        // Add the business_id to the data
+        const dataWithBusinessId = {
+          ...dataToSubmit,
+          business_id: user.id
+        };
+
         const { error } = await supabase
           .from('customers')
-          .insert([dataToSubmit]);
+          .insert([dataWithBusinessId]);
         
         if (error) throw error;
         toast({ title: "Success", description: "Contact created successfully" });
