@@ -71,14 +71,17 @@ export type Database = {
           billing_suburb: string | null
           billing_website: string | null
           business_id: string | null
+          company_name: string | null
           contact_id: string | null
           contact_type: string
           created_at: string | null
+          eu_vat_number: string | null
           first_name: string | null
           has_different_shipping: boolean | null
           id: string
           is_inactive: boolean | null
           notes: string | null
+          opt_in_for_marketing: boolean | null
           organization_type: string
           shipping_address: string | null
           shipping_contact_person: string | null
@@ -106,14 +109,17 @@ export type Database = {
           billing_suburb?: string | null
           billing_website?: string | null
           business_id?: string | null
+          company_name?: string | null
           contact_id?: string | null
           contact_type: string
           created_at?: string | null
+          eu_vat_number?: string | null
           first_name?: string | null
           has_different_shipping?: boolean | null
           id?: string
           is_inactive?: boolean | null
           notes?: string | null
+          opt_in_for_marketing?: boolean | null
           organization_type: string
           shipping_address?: string | null
           shipping_contact_person?: string | null
@@ -141,14 +147,17 @@ export type Database = {
           billing_suburb?: string | null
           billing_website?: string | null
           business_id?: string | null
+          company_name?: string | null
           contact_id?: string | null
           contact_type?: string
           created_at?: string | null
+          eu_vat_number?: string | null
           first_name?: string | null
           has_different_shipping?: boolean | null
           id?: string
           is_inactive?: boolean | null
           notes?: string | null
+          opt_in_for_marketing?: boolean | null
           organization_type?: string
           shipping_address?: string | null
           shipping_contact_person?: string | null

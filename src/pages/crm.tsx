@@ -13,15 +13,6 @@ import {
 } from "@/components/ui/select";
 import { Users, Search, Plus, Filter, ArrowLeft, Pencil } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { 
-  Sidebar, 
-  SidebarContent, 
-  SidebarProvider,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-} from "@/components/ui/sidebar";
 
 interface CustomerFormData {
   first_name: string | null;
@@ -119,42 +110,41 @@ const CRM = () => {
   };
 
   const handleSubmit = async () => {
-    try {
-      if (!businessId) {
-        toast({
-          title: "Error",
-          description: "Business profile not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { error } = await supabase
-        .from("customers")
-        .upsert({
-          ...formData,
-          business_id: businessId,
-          id: editingCustomerId,
-        });
-
-      if (error) throw error;
-
+    if (!businessId) {
       toast({
-        title: "Success",
-        description: editingCustomerId ? "Customer updated successfully" : "Customer added successfully",
+        title: "Error",
+        description: "Business profile not found",
+        variant: "destructive",
       });
-      
-      fetchCustomers();
-      setIsAddingCustomer(false);
-      setFormData(initialFormData);
-      setEditingCustomerId(null);
-    } catch (error: any) {
+      return;
+    }
+
+    const { error } = await supabase
+      .from("customers")
+      .upsert({
+        ...formData,
+        business_id: businessId,
+        id: editingCustomerId,
+      });
+
+    if (error) {
       toast({
         title: "Error",
         description: error.message,
         variant: "destructive",
       });
+      return;
     }
+
+    toast({
+      title: "Success",
+      description: editingCustomerId ? "Customer updated successfully" : "Customer added successfully",
+    });
+    
+    fetchCustomers();
+    setIsAddingCustomer(false);
+    setFormData(initialFormData);
+    setEditingCustomerId(null);
   };
 
   const filteredCustomers = customers.filter(customer => 
