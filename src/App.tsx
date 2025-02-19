@@ -3,8 +3,8 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Auth from "./pages/auth";
 import Dashboard from "./pages/dashboard";
-import Profile from "./pages/dashboard/profile";
-import CRM from "./pages/dashboard/crm";
+import Profile from "./pages/profile";
+import CRM from "./pages/crm";
 import { Toaster } from "@/components/ui/toaster";
 
 function App() {
@@ -14,8 +14,8 @@ function App() {
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/dashboard/profile" element={<Profile />} />
-        <Route path="/dashboard/crm" element={<CRM />} />
+        <Route path="/profile" element={<Profile />} />
+        <Route path="/crm" element={<CRM />} />
       </Routes>
       <Toaster />
     </Router>
