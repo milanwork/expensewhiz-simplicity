@@ -65,7 +65,7 @@ export default function Contacts() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Contacts</h1>
-        <Button onClick={() => navigate("/contacts/new")}>
+        <Button onClick={() => navigate("/dashboard/contacts/new")}>
           <Plus className="w-4 h-4 mr-2" />
           Add Contact
         </Button>
@@ -84,48 +84,56 @@ export default function Contacts() {
       </div>
 
       <div className="bg-white rounded-lg shadow">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b">
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Name/Company</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Type</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Email</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Phone</th>
-                <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredContacts.map((contact) => (
-                <tr
-                  key={contact.id}
-                  className="border-b hover:bg-gray-50 cursor-pointer"
-                  onClick={() => navigate(`/contacts/${contact.id}`)}
-                >
-                  <td className="px-6 py-4">
-                    {contact.organization_type === 'company' 
-                      ? contact.company_name 
-                      : `${contact.first_name} ${contact.surname}`}
-                  </td>
-                  <td className="px-6 py-4">
-                    <span className="capitalize">{contact.contact_type}</span>
-                  </td>
-                  <td className="px-6 py-4">{contact.billing_email}</td>
-                  <td className="px-6 py-4">{contact.billing_phone}</td>
-                  <td className="px-6 py-4">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      contact.is_inactive 
-                        ? 'bg-red-100 text-red-800' 
-                        : 'bg-green-100 text-green-800'
-                    }`}>
-                      {contact.is_inactive ? 'Inactive' : 'Active'}
-                    </span>
-                  </td>
+        {isLoading ? (
+          <div className="p-8 text-center text-gray-500">Loading contacts...</div>
+        ) : filteredContacts.length === 0 ? (
+          <div className="p-8 text-center text-gray-500">
+            {searchQuery ? "No contacts found matching your search." : "No contacts yet."}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b">
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Name/Company</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Type</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Email</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Phone</th>
+                  <th className="px-6 py-3 text-left text-sm font-semibold text-gray-600">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {filteredContacts.map((contact) => (
+                  <tr
+                    key={contact.id}
+                    className="border-b hover:bg-gray-50 cursor-pointer"
+                    onClick={() => navigate(`/dashboard/contacts/${contact.id}`)}
+                  >
+                    <td className="px-6 py-4">
+                      {contact.organization_type === 'company' 
+                        ? contact.company_name 
+                        : `${contact.first_name} ${contact.surname}`}
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className="capitalize">{contact.contact_type}</span>
+                    </td>
+                    <td className="px-6 py-4">{contact.billing_email}</td>
+                    <td className="px-6 py-4">{contact.billing_phone}</td>
+                    <td className="px-6 py-4">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        contact.is_inactive 
+                          ? 'bg-red-100 text-red-800' 
+                          : 'bg-green-100 text-green-800'
+                      }`}>
+                        {contact.is_inactive ? 'Inactive' : 'Active'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
