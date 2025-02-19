@@ -123,42 +123,29 @@ export default function ContactForm() {
             shipping_website: formData.billing_website,
           };
 
-      if (id) {
-        const { error } = await supabase
-          .from('customers')
-          .update(dataToSubmit)
-          .eq('id', id);
-        
-        if (error) throw error;
-        toast({ title: "Success", description: "Contact updated successfully" });
-      } else {
-        const dataWithBusinessId = {
-          ...dataToSubmit,
-          business_id: user.id
-        };
+      const finalData = {
+        ...dataToSubmit,
+        business_id: user.id
+      };
 
-        const { error } = await supabase
-          .from('customers')
-          .insert([dataWithBusinessId]);
-        
-        if (error) throw error;
-        toast({ title: "Success", description: "Contact created successfully" });
-      }
+      const { error } = await supabase
+        .from('customers')
+        .insert([finalData]);
       
+      if (error) {
+        console.error('Supabase error:', error);
+        throw new Error(error.message);
+      }
+
+      toast({ title: "Success", description: "Contact created successfully" });
       navigate("/dashboard/contacts");
     } catch (error: any) {
-      console.error('Error saving contact:', error);
+      console.error('Submission error:', error);
       toast({
         title: "Error",
-        description: error.message === 'Authentication required' 
-          ? "Please log in to save contacts" 
-          : "Failed to save contact",
+        description: "Failed to save contact. Please try again.",
         variant: "destructive",
       });
-      
-      if (error.message === 'Authentication required') {
-        navigate("/auth");
-      }
     } finally {
       setIsLoading(false);
     }
