@@ -396,48 +396,7 @@ const CRM = () => {
     </div>
   );
 
-  return (
-    <SidebarProvider>
-      <div className="min-h-screen flex w-full">
-        <Sidebar>
-          <SidebarHeader>
-            <h2 className="text-lg font-semibold px-4">Menu</h2>
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="/dashboard">
-                    <Users />
-                    <span>Dashboard</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="/crm">
-                    <Users />
-                    <span>CRM</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="/profile">
-                    <Users />
-                    <span>Profile</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarContent>
-        </Sidebar>
-        <main className="flex-1">
-          {mainContent}
-        </main>
-      </div>
-    </SidebarProvider>
-  );
+  return mainContent;
 };
 
 export default CRM;
