@@ -52,9 +52,7 @@ export default function ViewInvoice() {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [isEditing, setIsEditing] = useState(!id);
   const [customers, setCustomers] = useState<Customer[]>([]);
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerPO, setCustomerPO] = useState("");
@@ -137,7 +135,6 @@ export default function ViewInvoice() {
       if (invoiceError) throw invoiceError;
       if (!invoiceData) throw new Error('Invoice not found');
 
-      setInvoice(invoiceData);
       setSelectedCustomer(invoiceData.customer.id);
       setInvoiceNumber(invoiceData.invoice_number);
       setCustomerPO(invoiceData.customer_po_number || '');
@@ -147,7 +144,6 @@ export default function ViewInvoice() {
       setItems(invoiceData.items);
       setNotes(invoiceData.notes || '');
 
-      // Handle share URL
       const { data: shareData } = await supabase
         .from('shared_links')
         .select('token')
@@ -162,6 +158,101 @@ export default function ViewInvoice() {
       toast({
         title: "Error",
         description: "Failed to load invoice details",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!businessProfile) throw new Error("Business profile not found");
+
+      const { subtotal, tax, total } = calculateTotals();
+
+      const invoiceData = {
+        business_id: businessProfile.id,
+        customer_id: selectedCustomer,
+        invoice_number: invoiceNumber,
+        customer_po_number: customerPO,
+        issue_date: issueDate,
+        due_date: dueDate,
+        notes,
+        subtotal,
+        tax,
+        total,
+        is_tax_inclusive: isTaxInclusive,
+        status: 'draft' as const
+      };
+
+      let savedInvoiceId = id;
+      
+      if (id) {
+        // Update existing invoice
+        const { error: invoiceError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', id);
+
+        if (invoiceError) throw invoiceError;
+
+        // Delete existing items
+        await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', id);
+      } else {
+        // Create new invoice
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert([invoiceData])
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        if (newInvoice) {
+          savedInvoiceId = newInvoice.id;
+        }
+      }
+
+      // Insert invoice items
+      if (savedInvoiceId) {
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(
+            items.map(item => ({
+              invoice_id: savedInvoiceId,
+              ...item
+            }))
+          );
+
+        if (itemsError) throw itemsError;
+      }
+
+      toast({
+        title: "Success",
+        description: "Invoice saved successfully",
+      });
+
+      if (!id) {
+        navigate(`/dashboard/invoices/${savedInvoiceId}`);
+      }
+    } catch (error: any) {
+      console.error('Error saving invoice:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save invoice",
         variant: "destructive",
       });
     } finally {
@@ -218,100 +309,6 @@ export default function ViewInvoice() {
     }
   };
 
-  const handleSave = async () => {
-    setIsLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: businessProfile } = await supabase
-        .from('business_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!businessProfile) throw new Error("Business profile not found");
-
-      const { subtotal, tax, total } = calculateTotals();
-
-      const invoiceData = {
-        business_id: businessProfile.id,
-        customer_id: selectedCustomer,
-        invoice_number: invoiceNumber,
-        customer_po_number: customerPO,
-        issue_date: issueDate,
-        due_date: dueDate,
-        notes,
-        subtotal,
-        tax,
-        total,
-        is_tax_inclusive: isTaxInclusive,
-        status: 'draft' as const
-      };
-
-      if (id) {
-        // Update existing invoice
-        const { error: invoiceError } = await supabase
-          .from('invoices')
-          .update(invoiceData)
-          .eq('id', id);
-
-        if (invoiceError) throw invoiceError;
-
-        // Delete existing items and insert new ones
-        await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', id);
-      } else {
-        // Create new invoice
-        const { data: invoice, error: invoiceError } = await supabase
-          .from('invoices')
-          .insert([invoiceData])
-          .select()
-          .single();
-
-        if (invoiceError) throw invoiceError;
-        if (invoice) {
-          id = invoice.id;
-        }
-      }
-
-      // Insert invoice items
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(
-          items.map(item => ({
-            invoice_id: id,
-            ...item
-          }))
-        );
-
-      if (itemsError) throw itemsError;
-
-      toast({
-        title: "Success",
-        description: "Invoice saved successfully",
-      });
-
-      if (!id) {
-        navigate(`/dashboard/invoices/${id}`);
-      } else {
-        setIsEditing(false);
-        fetchInvoiceDetails();
-      }
-    } catch (error: any) {
-      console.error('Error saving invoice:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save invoice",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   if (isLoading) {
     return (
       <div className="p-6">
@@ -336,255 +333,160 @@ export default function ViewInvoice() {
           </h1>
         </div>
         <div className="flex items-center space-x-2">
-          {id && !isEditing && (
-            <>
-              <Button variant="outline" onClick={handleShare}>
-                <Share2 className="mr-2 h-4 w-4" />
-                Share
-              </Button>
-              <Button onClick={() => setIsEditing(true)}>
-                Edit
-              </Button>
-            </>
-          )}
-          {(isEditing || !id) && (
-            <Button onClick={handleSave} disabled={isLoading}>
-              <Save className="mr-2 h-4 w-4" />
-              Save
+          {id && (
+            <Button variant="outline" onClick={handleShare}>
+              <Share2 className="mr-2 h-4 w-4" />
+              Share
             </Button>
           )}
+          <Button onClick={handleSave} disabled={isLoading}>
+            <Save className="mr-2 h-4 w-4" />
+            Save
+          </Button>
           <Button variant="ghost" size="icon">
             <MoreHorizontal className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      {isEditing || !id ? (
-        <div className="space-y-8">
-          <div className="grid grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div>
-                <Label>Customer *</Label>
-                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.company_name || `${customer.first_name} ${customer.surname}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Invoice number *</Label>
-                  <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Customer PO number</Label>
-                  <Input value={customerPO} onChange={(e) => setCustomerPO(e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Issue date *</Label>
-                  <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-                </div>
-                <div>
-                  <Label>Due date *</Label>
-                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-                </div>
-              </div>
-              <div>
-                <Label>Amounts are</Label>
-                <RadioGroup
-                  value={isTaxInclusive ? "inclusive" : "exclusive"}
-                  onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
-                  className="flex items-center space-x-4"
-                >
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="inclusive" id="inclusive" />
-                    <Label htmlFor="inclusive">Tax inclusive</Label>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <RadioGroupItem value="exclusive" id="exclusive" />
-                    <Label htmlFor="exclusive">Tax exclusive</Label>
-                  </div>
-                </RadioGroup>
-              </div>
+      <div className="space-y-8">
+        <div className="grid grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div>
+              <Label>Customer *</Label>
+              <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.company_name || `${customer.first_name} ${customer.surname}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
           <div className="space-y-4">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left">
-                  <th className="pb-2">Description</th>
-                  <th className="pb-2">Category *</th>
-                  <th className="pb-2">Amount ($) *</th>
-                  <th className="pb-2">Job</th>
-                  <th className="pb-2">Tax code *</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => (
-                  <tr key={index} className="border-t">
-                    <td className="py-2">
-                      <Input
-                        value={item.description}
-                        onChange={(e) => updateItem(index, "description", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Select
-                        value={item.category}
-                        onValueChange={(value) => updateItem(index, "category", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="service">Service</SelectItem>
-                          <SelectItem value="product">Product</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        type="number"
-                        value={item.amount}
-                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        value={item.job}
-                        onChange={(e) => updateItem(index, "job", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Select
-                        value={item.tax_code}
-                        onValueChange={(value) => updateItem(index, "tax_code", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select tax code" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="GST">GST</SelectItem>
-                          <SelectItem value="NO_GST">No GST</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Button variant="outline" onClick={addItem}>Add line item</Button>
-          </div>
-
-          <div>
-            <Label>Notes to customer</Label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="h-24"
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Invoice number *</Label>
+                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+              </div>
+              <div>
+                <Label>Customer PO number</Label>
+                <Input value={customerPO} onChange={(e) => setCustomerPO(e.target.value)} />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Issue date *</Label>
+                <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+              </div>
+              <div>
+                <Label>Due date *</Label>
+                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              </div>
+            </div>
+            <div>
+              <Label>Amounts are</Label>
+              <RadioGroup
+                value={isTaxInclusive ? "inclusive" : "exclusive"}
+                onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
+                className="flex items-center space-x-4"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="inclusive" id="inclusive" />
+                  <Label htmlFor="inclusive">Tax inclusive</Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="exclusive" id="exclusive" />
+                  <Label htmlFor="exclusive">Tax exclusive</Label>
+                </div>
+              </RadioGroup>
+            </div>
           </div>
         </div>
-      ) : (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="grid grid-cols-2 gap-8 mb-8">
-            <div>
-              <h3 className="font-semibold mb-2">Bill To</h3>
-              <div>
-                {invoice?.customer.company_name || 
-                 `${invoice?.customer.first_name} ${invoice?.customer.surname}`}
-              </div>
-              {invoice?.customer.billing_email && (
-                <div>{invoice.customer.billing_email}</div>
-              )}
-            </div>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Invoice Number:</span>
-                <span>{invoice?.invoice_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Issue Date:</span>
-                <span>{new Date(invoice?.issue_date || '').toLocaleDateString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Due Date:</span>
-                <span>{new Date(invoice?.due_date || '').toLocaleDateString()}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Status:</span>
-                <span className={`
-                  px-2 py-1 rounded-full text-xs
-                  ${invoice?.status === 'paid' ? 'bg-green-100 text-green-800' :
-                    invoice?.status === 'overdue' ? 'bg-red-100 text-red-800' :
-                    invoice?.status === 'draft' ? 'bg-gray-100 text-gray-800' :
-                    'bg-blue-100 text-blue-800'}
-                `}>
-                  {invoice?.status.charAt(0).toUpperCase() + invoice?.status.slice(1)}
-                </span>
-              </div>
-            </div>
-          </div>
 
-          <table className="w-full mb-8">
+        <div className="space-y-4">
+          <table className="w-full">
             <thead>
-              <tr className="border-b text-sm">
-                <th className="py-3 px-4 text-left font-medium text-gray-600">Description</th>
-                <th className="py-3 px-4 text-left font-medium text-gray-600">Category</th>
-                <th className="py-3 px-4 text-left font-medium text-gray-600">Job</th>
-                <th className="py-3 px-4 text-right font-medium text-gray-600">Amount</th>
+              <tr className="text-left">
+                <th className="pb-2">Description</th>
+                <th className="pb-2">Category *</th>
+                <th className="pb-2">Amount ($) *</th>
+                <th className="pb-2">Job</th>
+                <th className="pb-2">Tax code *</th>
               </tr>
             </thead>
             <tbody>
-              {invoice?.items.map((item) => (
-                <tr key={item.id} className="border-b">
-                  <td className="py-3 px-4">{item.description}</td>
-                  <td className="py-3 px-4">{item.category}</td>
-                  <td className="py-3 px-4">{item.job}</td>
-                  <td className="py-3 px-4 text-right">${item.amount.toFixed(2)}</td>
+              {items.map((item, index) => (
+                <tr key={index} className="border-t">
+                  <td className="py-2">
+                    <Input
+                      value={item.description}
+                      onChange={(e) => updateItem(index, "description", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Select
+                      value={item.category}
+                      onValueChange={(value) => updateItem(index, "category", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select category" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="service">Service</SelectItem>
+                        <SelectItem value="product">Product</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      type="number"
+                      value={item.amount}
+                      onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      value={item.job}
+                      onChange={(e) => updateItem(index, "job", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Select
+                      value={item.tax_code}
+                      onValueChange={(value) => updateItem(index, "tax_code", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select tax code" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GST">GST</SelectItem>
+                        <SelectItem value="NO_GST">No GST</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-
-          <div className="flex justify-end">
-            <div className="w-64 space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Subtotal</span>
-                <span>${invoice?.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Tax</span>
-                <span>${invoice?.tax.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between font-semibold">
-                <span>Total</span>
-                <span>${invoice?.total.toFixed(2)}</span>
-              </div>
-            </div>
-          </div>
-
-          {invoice?.notes && (
-            <div className="mt-8 border-t pt-4">
-              <h3 className="font-semibold mb-2">Notes</h3>
-              <p className="text-gray-600">{invoice.notes}</p>
-            </div>
-          )}
+          <Button variant="outline" onClick={addItem}>Add line item</Button>
         </div>
-      )}
+
+        <div>
+          <Label>Notes to customer</Label>
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="h-24"
+          />
+        </div>
+      </div>
     </div>
   );
 }
