@@ -71,7 +71,7 @@ const Dashboard = () => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    { icon: Users, label: "CRM", path: "/crm" },
+    { icon: Users, label: "Contacts", path: "/contacts" },
     { 
       icon: CreditCard, 
       label: "Sales & Payment", 
