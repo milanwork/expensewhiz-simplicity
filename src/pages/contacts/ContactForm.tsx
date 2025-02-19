@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -128,22 +129,36 @@ export default function ContactForm() {
         business_id: user.id
       };
 
-      const { error } = await supabase
-        .from('customers')
-        .insert([finalData]);
-      
-      if (error) {
-        console.error('Supabase error:', error);
-        throw new Error(error.message);
+      let error;
+      if (id) {
+        // Update existing contact
+        const { error: updateError } = await supabase
+          .from('customers')
+          .update(finalData)
+          .eq('id', id);
+        error = updateError;
+      } else {
+        // Create new contact
+        const { error: insertError } = await supabase
+          .from('customers')
+          .insert([finalData]);
+        error = insertError;
       }
 
-      toast({ title: "Success", description: "Contact created successfully" });
+      if (error) {
+        throw error;
+      }
+
+      toast({ 
+        title: "Success", 
+        description: id ? "Contact updated successfully" : "Contact created successfully" 
+      });
       navigate("/dashboard/contacts");
     } catch (error: any) {
-      console.error('Submission error:', error);
+      console.error('Error saving contact:', error);
       toast({
         title: "Error",
-        description: "Failed to save contact. Please try again.",
+        description: error.message || "Failed to save contact. Please try again.",
         variant: "destructive",
       });
     } finally {
