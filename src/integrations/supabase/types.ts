@@ -57,6 +57,122 @@ export type Database = {
         }
         Relationships: []
       }
+      customers: {
+        Row: {
+          abn: string | null
+          billing_address: string | null
+          billing_contact_person: string | null
+          billing_country: string | null
+          billing_email: string | null
+          billing_fax: string | null
+          billing_phone: string | null
+          billing_postcode: string | null
+          billing_state: string | null
+          billing_suburb: string | null
+          billing_website: string | null
+          business_id: string | null
+          contact_id: string | null
+          contact_type: string
+          created_at: string | null
+          first_name: string | null
+          has_different_shipping: boolean | null
+          id: string
+          is_inactive: boolean | null
+          notes: string | null
+          organization_type: string
+          shipping_address: string | null
+          shipping_contact_person: string | null
+          shipping_country: string | null
+          shipping_email: string | null
+          shipping_fax: string | null
+          shipping_phone: string | null
+          shipping_postcode: string | null
+          shipping_state: string | null
+          shipping_suburb: string | null
+          shipping_website: string | null
+          surname: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          abn?: string | null
+          billing_address?: string | null
+          billing_contact_person?: string | null
+          billing_country?: string | null
+          billing_email?: string | null
+          billing_fax?: string | null
+          billing_phone?: string | null
+          billing_postcode?: string | null
+          billing_state?: string | null
+          billing_suburb?: string | null
+          billing_website?: string | null
+          business_id?: string | null
+          contact_id?: string | null
+          contact_type: string
+          created_at?: string | null
+          first_name?: string | null
+          has_different_shipping?: boolean | null
+          id?: string
+          is_inactive?: boolean | null
+          notes?: string | null
+          organization_type: string
+          shipping_address?: string | null
+          shipping_contact_person?: string | null
+          shipping_country?: string | null
+          shipping_email?: string | null
+          shipping_fax?: string | null
+          shipping_phone?: string | null
+          shipping_postcode?: string | null
+          shipping_state?: string | null
+          shipping_suburb?: string | null
+          shipping_website?: string | null
+          surname?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          abn?: string | null
+          billing_address?: string | null
+          billing_contact_person?: string | null
+          billing_country?: string | null
+          billing_email?: string | null
+          billing_fax?: string | null
+          billing_phone?: string | null
+          billing_postcode?: string | null
+          billing_state?: string | null
+          billing_suburb?: string | null
+          billing_website?: string | null
+          business_id?: string | null
+          contact_id?: string | null
+          contact_type?: string
+          created_at?: string | null
+          first_name?: string | null
+          has_different_shipping?: boolean | null
+          id?: string
+          is_inactive?: boolean | null
+          notes?: string | null
+          organization_type?: string
+          shipping_address?: string | null
+          shipping_contact_person?: string | null
+          shipping_country?: string | null
+          shipping_email?: string | null
+          shipping_fax?: string | null
+          shipping_phone?: string | null
+          shipping_postcode?: string | null
+          shipping_state?: string | null
+          shipping_suburb?: string | null
+          shipping_website?: string | null
+          surname?: string | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customers_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "business_profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
