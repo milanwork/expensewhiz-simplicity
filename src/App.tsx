@@ -8,6 +8,7 @@ import Contacts from "./pages/contacts";
 import ContactForm from "./pages/contacts/ContactForm";
 import Invoices from "./pages/invoices";
 import CreateInvoice from "./pages/invoices/CreateInvoice";
+import ViewInvoice from "./pages/invoices/ViewInvoice";
 import { Toaster } from "@/components/ui/toaster";
 
 function App() {
@@ -22,6 +23,7 @@ function App() {
           <Route path="/dashboard/contacts/:id" element={<ContactForm />} />
           <Route path="/dashboard/invoices" element={<Invoices />} />
           <Route path="/dashboard/invoices/create" element={<CreateInvoice />} />
+          <Route path="/dashboard/invoices/:id" element={<ViewInvoice />} />
           <Route path="/dashboard/profile" element={<Profile />} />
         </Route>
       </Routes>
