@@ -396,7 +396,11 @@ const CRM = () => {
     </div>
   );
 
-  return mainContent;
+  return (
+    <div className="flex-1">
+      {mainContent}
+    </div>
+  );
 };
 
 export default CRM;
