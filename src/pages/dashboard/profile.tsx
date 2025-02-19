@@ -135,8 +135,15 @@ const Profile = () => {
 
       if (profileError) throw profileError;
 
-      // Update business profile
+      // Check if business profile exists
+      const { data: existingProfile } = await supabase
+        .from("business_profiles")
+        .select("id")
+        .eq("user_id", user.id)
+        .single();
+
       const businessUpdates = {
+        id: existingProfile?.id, // Include the existing ID if it exists
         user_id: user.id,
         business_name: businessName,
         abn_acn: abnAcn,
@@ -152,7 +159,9 @@ const Profile = () => {
 
       let { error: businessError } = await supabase
         .from("business_profiles")
-        .upsert(businessUpdates);
+        .upsert(businessUpdates, {
+          onConflict: 'user_id' // Specify the column to check for conflicts
+        });
 
       if (businessError) throw businessError;
       
@@ -163,6 +172,7 @@ const Profile = () => {
       
       navigate("/dashboard");
     } catch (error: any) {
+      console.error("Error updating profiles:", error);
       toast({
         title: "Error updating profile",
         description: error.message,
