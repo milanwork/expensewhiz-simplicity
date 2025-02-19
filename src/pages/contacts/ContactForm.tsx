@@ -45,6 +45,7 @@ export default function ContactForm() {
   const { toast } = useToast();
   const { id } = useParams();
   const [isLoading, setIsLoading] = useState(false);
+  const [businessId, setBusinessId] = useState<string | null>(null);
   const [formData, setFormData] = useState<ContactFormData>({
     organization_type: 'individual',
     contact_type: 'customer',
@@ -64,8 +65,30 @@ export default function ContactForm() {
   }, [id]);
 
   const checkAuth = async () => {
-    const { data: { user }, error } = await supabase.auth.getUser();
-    if (error || !user) {
+    try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('Authentication required');
+      }
+
+      // Fetch the business profile ID
+      const { data: businessProfile, error: businessError } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (businessError) {
+        throw businessError;
+      }
+
+      if (!businessProfile) {
+        throw new Error('No business profile found');
+      }
+
+      setBusinessId(businessProfile.id);
+    } catch (error) {
+      console.error('Auth/Business check error:', error);
       toast({
         title: "Authentication Required",
         description: "Please log in to manage contacts",
@@ -102,9 +125,8 @@ export default function ContactForm() {
     setIsLoading(true);
 
     try {
-      const { data: { user }, error: authError } = await supabase.auth.getUser();
-      if (authError || !user) {
-        throw new Error('Authentication required');
+      if (!businessId) {
+        throw new Error('Business profile not found');
       }
 
       // If shipping is same as billing, copy billing address to shipping
@@ -126,7 +148,7 @@ export default function ContactForm() {
 
       const finalData = {
         ...dataToSubmit,
-        business_id: user.id
+        business_id: businessId
       };
 
       let error;
