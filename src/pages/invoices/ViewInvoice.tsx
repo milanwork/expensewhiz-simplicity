@@ -263,6 +263,8 @@ export default function ViewInvoice() {
           .from('invoice_items')
           .delete()
           .eq('invoice_id', id);
+
+        await logActivity('update', 'Invoice updated');
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -274,6 +276,7 @@ export default function ViewInvoice() {
         if (invoiceError) throw invoiceError;
         if (newInvoice) {
           savedInvoiceId = newInvoice.id;
+          await logActivity('create', 'Invoice created');
         }
       }
 
@@ -289,12 +292,6 @@ export default function ViewInvoice() {
           );
 
         if (itemsError) throw itemsError;
-      }
-
-      if (id) {
-        await logActivity('update', 'Invoice updated');
-      } else {
-        await logActivity('create', 'Invoice created');
       }
 
       toast({
