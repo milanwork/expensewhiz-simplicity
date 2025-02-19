@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -143,11 +142,10 @@ const Profile = () => {
         .single();
 
       const businessUpdates = {
-        id: existingProfile?.id, // Include the existing ID if it exists
+        id: existingProfile?.id,
         user_id: user.id,
         business_name: businessName,
         abn_acn: abnAcn,
-        client_id: clientId,
         address_line1: addressLine1,
         address_line2: addressLine2,
         city: city,
@@ -160,7 +158,7 @@ const Profile = () => {
       let { error: businessError } = await supabase
         .from("business_profiles")
         .upsert(businessUpdates, {
-          onConflict: 'user_id' // Specify the column to check for conflicts
+          onConflict: 'user_id'
         });
 
       if (businessError) throw businessError;
@@ -228,8 +226,9 @@ const Profile = () => {
                   <Input
                     id="clientId"
                     value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    placeholder="Enter client ID"
+                    readOnly
+                    className="bg-gray-100"
+                    placeholder="Auto-generated after saving"
                   />
                 </div>
               </div>
