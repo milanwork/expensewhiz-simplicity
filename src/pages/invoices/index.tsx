@@ -92,7 +92,7 @@ export default function Invoices() {
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-semibold">Invoices</h1>
-        <Button onClick={() => navigate("/dashboard/invoices/create")}>
+        <Button onClick={() => navigate("/dashboard/invoices/new")}>
           <Plus className="mr-2 h-4 w-4" />
           Create Invoice
         </Button>
