@@ -12,10 +12,15 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Share2, Save, Send, MoreHorizontal } from "lucide-react";
+import { ArrowLeft, Share2, Save, Send, MoreHorizontal, ChevronRight, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 interface Customer {
   id: string;
@@ -77,6 +82,7 @@ export default function ViewInvoice() {
   const [isLoading, setIsLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string>("");
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(false);
 
   useEffect(() => {
     fetchCustomers();
@@ -106,42 +112,6 @@ export default function ViewInvoice() {
     }
   };
 
-  const fetchCustomers = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      const { data: businessProfile } = await supabase
-        .from('business_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (businessProfile) {
-        const { data: customersList, error } = await supabase
-          .from('customers')
-          .select('id, company_name, first_name, surname, billing_email')
-          .eq('business_id', businessProfile.id);
-
-        if (error) throw error;
-        setCustomers(customersList || []);
-      }
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load customers",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const generateInvoiceNumber = async () => {
-    // Simple invoice number generation - you might want to make this more sophisticated
-    const number = Math.floor(Math.random() * 9000000) + 1000000;
-    setInvoiceNumber(number.toString());
-  };
-
   const fetchInvoiceDetails = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -169,9 +139,10 @@ export default function ViewInvoice() {
       setIssueDate(invoiceData.issue_date);
       setDueDate(invoiceData.due_date);
       setIsTaxInclusive(invoiceData.is_tax_inclusive);
-      setItems(invoiceData.items);
+      setItems(invoiceData.items || []);
       setNotes(invoiceData.notes || '');
 
+      // Fetch share URL if it exists
       const { data: shareData } = await supabase
         .from('shared_links')
         .select('token')
@@ -364,6 +335,12 @@ export default function ViewInvoice() {
     }
   };
 
+  const generateInvoiceNumber = async () => {
+    // Simple invoice number generation - you might want to make this more sophisticated
+    const number = Math.floor(Math.random() * 9000000) + 1000000;
+    setInvoiceNumber(number.toString());
+  };
+
   if (isLoading) {
     return (
       <div className="p-6">
@@ -546,27 +523,46 @@ export default function ViewInvoice() {
 
         {id && (
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow p-4">
-              <h3 className="text-lg font-semibold mb-4">Activity Log</h3>
-              <ScrollArea className="h-[600px]">
-                <div className="space-y-4">
-                  {activities.map((activity) => (
-                    <div key={activity.id} className="border-b pb-4">
-                      <div className="text-sm font-medium">{activity.activity_type}</div>
-                      <div className="text-sm text-gray-600">{activity.description}</div>
-                      <div className="text-xs text-gray-400 mt-1">
-                        {format(new Date(activity.created_at), 'MMM d, yyyy h:mm a')}
-                      </div>
+            <Collapsible
+              open={isActivityLogOpen}
+              onOpenChange={setIsActivityLogOpen}
+              className="bg-white rounded-lg shadow"
+            >
+              <div className="p-4 flex items-center justify-between">
+                <h3 className="text-lg font-semibold">Activity Log</h3>
+                <CollapsibleTrigger asChild>
+                  <Button variant="ghost" size="sm" className="w-9 p-0">
+                    {isActivityLogOpen ? (
+                      <ChevronDown className="h-4 w-4" />
+                    ) : (
+                      <ChevronRight className="h-4 w-4" />
+                    )}
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+              <CollapsibleContent>
+                <div className="px-4 pb-4">
+                  <ScrollArea className="h-[600px]">
+                    <div className="space-y-4">
+                      {activities.map((activity) => (
+                        <div key={activity.id} className="border-b pb-4">
+                          <div className="text-sm font-medium">{activity.activity_type}</div>
+                          <div className="text-sm text-gray-600">{activity.description}</div>
+                          <div className="text-xs text-gray-400 mt-1">
+                            {format(new Date(activity.created_at), 'MMM d, yyyy h:mm a')}
+                          </div>
+                        </div>
+                      ))}
+                      {activities.length === 0 && (
+                        <div className="text-sm text-gray-500 text-center">
+                          No activities yet
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {activities.length === 0 && (
-                    <div className="text-sm text-gray-500 text-center">
-                      No activities yet
-                    </div>
-                  )}
+                  </ScrollArea>
                 </div>
-              </ScrollArea>
-            </div>
+              </CollapsibleContent>
+            </Collapsible>
           </div>
         )}
       </div>
