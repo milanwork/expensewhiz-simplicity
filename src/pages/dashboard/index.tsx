@@ -1,6 +1,6 @@
 
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Outlet } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
 import {
   LayoutDashboard,
@@ -71,27 +71,27 @@ const Dashboard = () => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    { icon: Users, label: "Contacts", path: "/contacts" },
+    { icon: Users, label: "Contacts", path: "/dashboard/contacts" },
     { 
       icon: CreditCard, 
       label: "Sales & Payment", 
       subItems: [
-        { label: "Estimates", path: "/estimates" },
-        { label: "Invoices", path: "/invoices" },
-        { label: "Payment Setup", path: "/payment-setup" },
-        { label: "Products & Services", path: "/products" },
+        { label: "Estimates", path: "/dashboard/estimates" },
+        { label: "Invoices", path: "/dashboard/invoices" },
+        { label: "Payment Setup", path: "/dashboard/payment-setup" },
+        { label: "Products & Services", path: "/dashboard/products" },
       ]
     },
-    { icon: ShoppingCart, label: "Purchases", path: "/purchases" },
-    { icon: Receipt, label: "Receipts", path: "/receipts", badge: "NEW" },
-    { icon: BarChart3, label: "Report", path: "/report" },
+    { icon: ShoppingCart, label: "Purchases", path: "/dashboard/purchases" },
+    { icon: Receipt, label: "Receipts", path: "/dashboard/receipts", badge: "NEW" },
+    { icon: BarChart3, label: "Report", path: "/dashboard/report" },
     { 
       icon: Wallet, 
       label: "Currency", 
       subItems: [
-        { label: "Accounting", path: "/accounting" },
-        { label: "Banking", path: "/banking" },
-        { label: "Payroll", path: "/payroll", badge: "SOON" },
+        { label: "Accounting", path: "/dashboard/accounting" },
+        { label: "Banking", path: "/dashboard/banking" },
+        { label: "Payroll", path: "/dashboard/payroll", badge: "SOON" },
       ]
     },
   ];
@@ -101,8 +101,6 @@ const Dashboard = () => {
     { icon: Bell, label: "Notifications", path: "/dashboard/notifications", badge: "9+" },
     { icon: Settings, label: "Settings", path: "/dashboard/settings" },
   ];
-
-  if (!user) return null;
 
   return (
     <SidebarProvider>
@@ -119,7 +117,7 @@ const Dashboard = () => {
                   />
                 ) : (
                   <span className="text-xl font-semibold text-gray-600">
-                    {user.email?.[0].toUpperCase()}
+                    {user?.email?.[0].toUpperCase()}
                   </span>
                 )}
               </div>
@@ -127,7 +125,7 @@ const Dashboard = () => {
                 <h2 className="text-sm font-semibold text-gray-900 truncate">
                   {profile?.first_name
                     ? `${profile.first_name} ${profile.last_name}`
-                    : user.email}
+                    : user?.email}
                 </h2>
                 <p className="text-xs text-gray-500 truncate">Admin Manager</p>
               </div>
@@ -141,7 +139,7 @@ const Dashboard = () => {
                 <Button
                   variant="ghost"
                   className="w-full justify-start px-3 py-2 text-sm"
-                  onClick={() => navigate(item.path ?? '#')}
+                  onClick={() => navigate(item.path)}
                 >
                   <item.icon className="mr-2 h-4 w-4" />
                   {item.label}
@@ -203,13 +201,7 @@ const Dashboard = () => {
         </Sidebar>
 
         <main className="flex-1 p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h1 className="text-2xl font-semibold text-gray-900">Dashboard</h1>
-            <Button onClick={() => navigate("/profile")}>
-              Manage Profile
-            </Button>
-          </div>
-          {/* Dashboard content will go here */}
+          <Outlet />
         </main>
       </div>
     </SidebarProvider>

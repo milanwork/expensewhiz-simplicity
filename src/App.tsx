@@ -13,9 +13,10 @@ function App() {
       <Routes>
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
-        <Route path="/dashboard" element={<Dashboard />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/contacts" element={<Contacts />} />
+        <Route path="/dashboard" element={<Dashboard />}>
+          <Route path="/dashboard/contacts" element={<Contacts />} />
+          <Route path="/dashboard/profile" element={<Profile />} />
+        </Route>
       </Routes>
       <Toaster />
     </Router>
