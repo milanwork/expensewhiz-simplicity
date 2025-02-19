@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -57,10 +56,23 @@ export default function ContactForm() {
   const [showAdditionalPhone, setShowAdditionalPhone] = useState(false);
 
   useEffect(() => {
+    checkAuth();
     if (id) {
       fetchContact();
     }
   }, [id]);
+
+  const checkAuth = async () => {
+    const { data: { user }, error } = await supabase.auth.getUser();
+    if (error || !user) {
+      toast({
+        title: "Authentication Required",
+        description: "Please log in to manage contacts",
+        variant: "destructive",
+      });
+      navigate("/auth");
+    }
+  };
 
   const fetchContact = async () => {
     try {
@@ -89,6 +101,11 @@ export default function ContactForm() {
     setIsLoading(true);
 
     try {
+      const { data: { user }, error: authError } = await supabase.auth.getUser();
+      if (authError || !user) {
+        throw new Error('Authentication required');
+      }
+
       // If shipping is same as billing, copy billing address to shipping
       const dataToSubmit = formData.has_different_shipping
         ? formData
@@ -115,11 +132,6 @@ export default function ContactForm() {
         if (error) throw error;
         toast({ title: "Success", description: "Contact updated successfully" });
       } else {
-        // Get the current user's ID
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error('No authenticated user');
-
-        // Add the business_id to the data
         const dataWithBusinessId = {
           ...dataToSubmit,
           business_id: user.id
@@ -134,13 +146,19 @@ export default function ContactForm() {
       }
       
       navigate("/dashboard/contacts");
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving contact:', error);
       toast({
         title: "Error",
-        description: "Failed to save contact",
+        description: error.message === 'Authentication required' 
+          ? "Please log in to save contacts" 
+          : "Failed to save contact",
         variant: "destructive",
       });
+      
+      if (error.message === 'Authentication required') {
+        navigate("/auth");
+      }
     } finally {
       setIsLoading(false);
     }
