@@ -16,6 +16,7 @@ import {
   Settings,
   HelpCircle,
   LogOut,
+  Users,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -70,6 +71,7 @@ const Dashboard = () => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+    { icon: Users, label: "CRM", path: "/dashboard/crm" },
     { 
       icon: CreditCard, 
       label: "Sales & Payment", 
