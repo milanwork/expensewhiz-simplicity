@@ -14,6 +14,8 @@ import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Share2, Save, Send, MoreHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
 
 interface Customer {
   id: string;
@@ -48,6 +50,13 @@ interface Invoice {
   items: InvoiceItem[];
 }
 
+interface Activity {
+  id: string;
+  activity_type: string;
+  description: string;
+  created_at: string;
+}
+
 export default function ViewInvoice() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -67,16 +76,35 @@ export default function ViewInvoice() {
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [shareUrl, setShareUrl] = useState<string>("");
+  const [activities, setActivities] = useState<Activity[]>([]);
 
   useEffect(() => {
     fetchCustomers();
     if (id) {
       fetchInvoiceDetails();
+      fetchActivities();
     } else {
       generateInvoiceNumber();
       setIsLoading(false);
     }
   }, [id]);
+
+  const fetchActivities = async () => {
+    if (!id) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('invoice_activities')
+        .select('*')
+        .eq('invoice_id', id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setActivities(data || []);
+    } catch (error) {
+      console.error('Error fetching activities:', error);
+    }
+  };
 
   const fetchCustomers = async () => {
     try {
@@ -165,6 +193,29 @@ export default function ViewInvoice() {
     }
   };
 
+  const logActivity = async (activityType: string, description: string) => {
+    if (!id) return;
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const { error } = await supabase
+        .from('invoice_activities')
+        .insert([{
+          invoice_id: id,
+          activity_type: activityType,
+          description,
+          performed_by: user.id
+        }]);
+
+      if (error) throw error;
+      fetchActivities();
+    } catch (error) {
+      console.error('Error logging activity:', error);
+    }
+  };
+
   const handleSave = async () => {
     setIsLoading(true);
     try {
@@ -240,6 +291,12 @@ export default function ViewInvoice() {
         if (itemsError) throw itemsError;
       }
 
+      if (id) {
+        await logActivity('update', 'Invoice updated');
+      } else {
+        await logActivity('create', 'Invoice created');
+      }
+
       toast({
         title: "Success",
         description: "Invoice saved successfully",
@@ -293,6 +350,7 @@ export default function ViewInvoice() {
         ]);
         shareToken = `${window.location.origin}/share/invoice/${token}`;
         setShareUrl(shareToken);
+        await logActivity('share', 'Invoice shared');
       }
 
       await navigator.clipboard.writeText(shareToken);
@@ -349,143 +407,171 @@ export default function ViewInvoice() {
         </div>
       </div>
 
-      <div className="space-y-8">
-        <div className="grid grid-cols-2 gap-8">
-          <div className="space-y-4">
-            <div>
-              <Label>Customer *</Label>
-              <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a customer" />
-                </SelectTrigger>
-                <SelectContent>
-                  {customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.company_name || `${customer.first_name} ${customer.surname}`}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3 space-y-8">
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div>
+                <Label>Customer *</Label>
+                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.company_name || `${customer.first_name} ${customer.surname}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Invoice number *</Label>
+                  <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Customer PO number</Label>
+                  <Input value={customerPO} onChange={(e) => setCustomerPO(e.target.value)} />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Issue date *</Label>
+                  <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
+                </div>
+                <div>
+                  <Label>Due date *</Label>
+                  <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <Label>Amounts are</Label>
+                <RadioGroup
+                  value={isTaxInclusive ? "inclusive" : "exclusive"}
+                  onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
+                  className="flex items-center space-x-4"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="inclusive" id="inclusive" />
+                    <Label htmlFor="inclusive">Tax inclusive</Label>
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="exclusive" id="exclusive" />
+                    <Label htmlFor="exclusive">Tax exclusive</Label>
+                  </div>
+                </RadioGroup>
+              </div>
             </div>
           </div>
 
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Invoice number *</Label>
-                <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-              </div>
-              <div>
-                <Label>Customer PO number</Label>
-                <Input value={customerPO} onChange={(e) => setCustomerPO(e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label>Issue date *</Label>
-                <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-              </div>
-              <div>
-                <Label>Due date *</Label>
-                <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-              </div>
-            </div>
-            <div>
-              <Label>Amounts are</Label>
-              <RadioGroup
-                value={isTaxInclusive ? "inclusive" : "exclusive"}
-                onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
-                className="flex items-center space-x-4"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="inclusive" id="inclusive" />
-                  <Label htmlFor="inclusive">Tax inclusive</Label>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="exclusive" id="exclusive" />
-                  <Label htmlFor="exclusive">Tax exclusive</Label>
-                </div>
-              </RadioGroup>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <table className="w-full">
-            <thead>
-              <tr className="text-left">
-                <th className="pb-2">Description</th>
-                <th className="pb-2">Category *</th>
-                <th className="pb-2">Amount ($) *</th>
-                <th className="pb-2">Job</th>
-                <th className="pb-2">Tax code *</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item, index) => (
-                <tr key={index} className="border-t">
-                  <td className="py-2">
-                    <Input
-                      value={item.description}
-                      onChange={(e) => updateItem(index, "description", e.target.value)}
-                    />
-                  </td>
-                  <td className="py-2">
-                    <Select
-                      value={item.category}
-                      onValueChange={(value) => updateItem(index, "category", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="service">Service</SelectItem>
-                        <SelectItem value="product">Product</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      type="number"
-                      value={item.amount}
-                      onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
-                    />
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      value={item.job}
-                      onChange={(e) => updateItem(index, "job", e.target.value)}
-                    />
-                  </td>
-                  <td className="py-2">
-                    <Select
-                      value={item.tax_code}
-                      onValueChange={(value) => updateItem(index, "tax_code", value)}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select tax code" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="GST">GST</SelectItem>
-                        <SelectItem value="NO_GST">No GST</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </td>
+            <table className="w-full">
+              <thead>
+                <tr className="text-left">
+                  <th className="pb-2">Description</th>
+                  <th className="pb-2">Category *</th>
+                  <th className="pb-2">Amount ($) *</th>
+                  <th className="pb-2">Job</th>
+                  <th className="pb-2">Tax code *</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-          <Button variant="outline" onClick={addItem}>Add line item</Button>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="py-2">
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.category}
+                        onValueChange={(value) => updateItem(index, "category", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="service">Service</SelectItem>
+                          <SelectItem value="product">Product</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        value={item.job}
+                        onChange={(e) => updateItem(index, "job", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.tax_code}
+                        onValueChange={(value) => updateItem(index, "tax_code", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select tax code" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GST">GST</SelectItem>
+                          <SelectItem value="NO_GST">No GST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button variant="outline" onClick={addItem}>Add line item</Button>
+          </div>
+
+          <div>
+            <Label>Notes to customer</Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="h-24"
+            />
+          </div>
         </div>
 
-        <div>
-          <Label>Notes to customer</Label>
-          <Input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="h-24"
-          />
-        </div>
+        {id && (
+          <div className="lg:col-span-1">
+            <div className="bg-white rounded-lg shadow p-4">
+              <h3 className="text-lg font-semibold mb-4">Activity Log</h3>
+              <ScrollArea className="h-[600px]">
+                <div className="space-y-4">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="border-b pb-4">
+                      <div className="text-sm font-medium">{activity.activity_type}</div>
+                      <div className="text-sm text-gray-600">{activity.description}</div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {format(new Date(activity.created_at), 'MMM d, yyyy h:mm a')}
+                      </div>
+                    </div>
+                  ))}
+                  {activities.length === 0 && (
+                    <div className="text-sm text-gray-500 text-center">
+                      No activities yet
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
