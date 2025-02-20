@@ -2,7 +2,7 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 import { Resend } from "npm:resend@2.0.0";
-import { jsPDF } from "npm:jspdf@latest";
+import { generatePDF } from "./generatePdf.ts";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
@@ -46,12 +46,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating payment link for invoice:', invoice.invoice_number);
 
-    // Create payment link
+    // Create payment link using Stripe edge function
     const paymentLinkResponse = await fetch(`${new URL(req.url).origin}/create-payment-link`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: req.headers.get('Authorization') || '',
+        ...corsHeaders,
       },
       body: JSON.stringify({
         invoiceId: invoice.id,
@@ -61,7 +61,16 @@ const handler = async (req: Request): Promise<Response> => {
       }),
     });
 
+    if (!paymentLinkResponse.ok) {
+      const errorData = await paymentLinkResponse.json();
+      throw new Error(`Failed to create payment link: ${errorData.error || 'Unknown error'}`);
+    }
+
     const { url: paymentUrl } = await paymentLinkResponse.json();
+
+    if (!paymentUrl) {
+      throw new Error('Payment URL not received from Stripe');
+    }
 
     // Generate PDF
     const pdfBuffer = await generatePDF(invoice, invoice.business_profiles, invoice.customers);
@@ -118,6 +127,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     return new Response(JSON.stringify({ success: true }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
     });
   } catch (error: any) {
     console.error("Error in send-invoice function:", error);
