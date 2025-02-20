@@ -94,15 +94,6 @@ interface InvoiceItem {
   tax_code: string;
 }
 
-// Add interfaces for API requests
-interface ShareInvoiceRequest {
-  invoiceId: string;
-  amount: number;
-  customerEmail: string;
-  description: string;
-  invoiceNumber: string;
-}
-
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -393,35 +384,14 @@ export default function NewInvoice() {
       return;
     }
 
-    if (!invoiceNumber) {
-      toast({
-        title: "Error",
-        description: "Invoice number is required",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsSending(true);
     try {
-      const requestData: ShareInvoiceRequest = {
-        invoiceId: existingInvoiceId,
-        amount: totals.total,
-        customerEmail: shareEmail,
-        description: shareMessage || `Payment for invoice ${invoiceNumber}`,
-        invoiceNumber: invoiceNumber,
-      };
-
-      // Log the request data for validation
-      console.log('Sharing invoice with data:', requestData);
-
-      // Validate required fields before making the request
-      if (!requestData.invoiceNumber || !requestData.customerEmail || !requestData.amount) {
-        throw new Error('Missing required fields for payment link creation');
-      }
-
-      const response = await supabase.functions.invoke('create-payment-link', {
-        body: requestData,
+      const response = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoiceId: existingInvoiceId,
+          recipientEmail: shareEmail,
+          message: shareMessage,
+        },
       });
 
       if (response.error) throw new Error(response.error.message);
