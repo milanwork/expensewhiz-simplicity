@@ -44,21 +44,28 @@ const Dashboard = () => {
 
   useEffect(() => {
     const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
+      try {
+        const { data: { user }, error } = await supabase.auth.getUser();
+        
+        if (error || !user) {
+          navigate("/auth");
+          return;
+        }
+
+        setUser(user);
+        
+        // Fetch user profile without headers that might cause cloning issues
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', user.id)
+          .single();
+        
+        setProfile(profileData);
+      } catch (error) {
+        console.error('Error checking user:', error);
         navigate("/auth");
-        return;
       }
-      setUser(user);
-      
-      // Fetch user profile
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-      
-      setProfile(profile);
     };
 
     checkUser();

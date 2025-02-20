@@ -18,15 +18,15 @@ function App() {
         <Route path="/" element={<Index />} />
         <Route path="/auth" element={<Auth />} />
         <Route path="/dashboard" element={<Dashboard />}>
-          <Route path="/dashboard/contacts" element={<Contacts />} />
-          <Route path="/dashboard/contacts/new" element={<ContactForm />} />
-          <Route path="/dashboard/contacts/:id" element={<ContactForm />} />
-          <Route path="/dashboard/invoices" element={<Invoices />}>
+          <Route path="contacts" element={<Contacts />} />
+          <Route path="contacts/new" element={<ContactForm />} />
+          <Route path="contacts/:id" element={<ContactForm />} />
+          <Route path="invoices">
             <Route index element={<Invoices />} />
             <Route path="new" element={<NewInvoice />} />
             <Route path=":id" element={<ViewInvoice />} />
           </Route>
-          <Route path="/dashboard/profile" element={<Profile />} />
+          <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
       <Toaster />
