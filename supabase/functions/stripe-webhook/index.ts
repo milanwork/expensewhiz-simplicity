@@ -27,9 +27,9 @@ serve(async (req) => {
 
   try {
     const body = await req.text();
-    // Parse the event directly without signature verification for now
     const event = JSON.parse(body);
     console.log('Processing webhook event:', event.type);
+    console.log('Event data:', JSON.stringify(event.data, null, 2));
 
     switch (event.type) {
       case 'checkout.session.completed':
@@ -37,10 +37,13 @@ serve(async (req) => {
         const sessionOrIntent = event.data.object;
         const metadata = sessionOrIntent.metadata || {};
         const invoiceId = metadata.invoiceId;
-        const amountPaid = (sessionOrIntent.amount_total || sessionOrIntent.amount) / 100;
+        
+        // Get the correct amount from the payment
+        const rawAmount = sessionOrIntent.amount_total || sessionOrIntent.amount;
+        const amountPaid = parseFloat((rawAmount / 100).toFixed(2)); // Ensure proper decimal formatting
 
         if (invoiceId) {
-          console.log(`Updating invoice ${invoiceId} with payment of $${amountPaid}`);
+          console.log(`Processing payment for invoice ${invoiceId} - Amount: $${amountPaid}`);
 
           // First, fetch current invoice data
           const { data: currentInvoice, error: fetchError } = await supabase
@@ -54,10 +57,19 @@ serve(async (req) => {
             throw fetchError;
           }
 
+          console.log('Current invoice state:', currentInvoice);
+
           // Calculate new values
-          const newAmountPaid = (currentInvoice.amount_paid || 0) + amountPaid;
+          const currentAmountPaid = parseFloat((currentInvoice.amount_paid || 0).toFixed(2));
+          const newAmountPaid = currentAmountPaid + amountPaid;
           const newBalanceDue = Math.max(0, currentInvoice.total - newAmountPaid);
           const newStatus = newBalanceDue === 0 ? 'paid' : 'sent';
+
+          console.log('Updating invoice with:', {
+            status: newStatus,
+            amount_paid: newAmountPaid,
+            balance_due: newBalanceDue
+          });
 
           // Update invoice
           const { error: updateError } = await supabase
@@ -75,7 +87,7 @@ serve(async (req) => {
             throw updateError;
           }
 
-          // Log payment activity
+          // Log payment activity with specific amount
           const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
@@ -90,6 +102,8 @@ serve(async (req) => {
           }
 
           console.log('Successfully updated invoice and logged payment activity');
+        } else {
+          console.error('No invoiceId found in payment metadata');
         }
         break;
       }
