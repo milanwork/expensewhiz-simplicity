@@ -1,96 +1,101 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.38.4';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2023-10-16',
 });
 
-const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
-
-// Create a Supabase client
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-const supabase = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+const supabase = createClient(supabaseUrl, supabaseKey);
 
-const handler = async (req: Request) => {
+const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+};
+
+const handler = async (req: Request): Promise<Response> => {
+  if (req.method === 'OPTIONS') {
+    return new Response(null, { headers: corsHeaders });
+  }
+
   try {
-    if (req.method === 'POST') {
-      const body = await req.text();
-      const signature = req.headers.get('stripe-signature');
-
-      if (!signature) {
-        return new Response('No signature found', { status: 400 });
-      }
-
-      console.log('Received webhook. Processing...');
-
-      // Verify the webhook signature
-      const event = stripe.webhooks.constructEvent(body, signature, webhookSecret);
-      
-      console.log('Event type:', event.type);
-
-      // Handle successful payment
-      if (event.type === 'checkout.session.completed') {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const metadata = session.metadata || {};
-        const { invoiceId } = metadata;
-
-        if (!invoiceId) {
-          console.error('No invoice ID found in metadata');
-          return new Response('No invoice ID found', { status: 400 });
-        }
-
-        console.log('Processing payment for invoice:', invoiceId);
-
-        // Get the payment details
-        const paymentIntent = await stripe.paymentIntents.retrieve(session.payment_intent as string);
-        const amountPaid = paymentIntent.amount / 100; // Convert from cents to dollars
-
-        // Update the invoice in the database
-        const { error: updateError } = await supabase
-          .from('invoices')
-          .update({
-            status: 'paid',
-            amount_paid: amountPaid,
-            balance_due: 0,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', invoiceId);
-
-        if (updateError) {
-          console.error('Error updating invoice:', updateError);
-          throw updateError;
-        }
-
-        // Add activity log
-        const { error: activityError } = await supabase
-          .from('invoice_activities')
-          .insert({
-            invoice_id: invoiceId,
-            activity_type: 'payment',
-            description: `Payment received: $${amountPaid.toFixed(2)}`,
-          });
-
-        if (activityError) {
-          console.error('Error creating activity log:', activityError);
-          // Don't throw here as the payment was still processed successfully
-        }
-
-        console.log('Successfully processed payment for invoice:', invoiceId);
-      }
-
-      return new Response(JSON.stringify({ received: true }), {
-        status: 200,
-        headers: { 'Content-Type': 'application/json' }
-      });
+    const signature = req.headers.get('stripe-signature');
+    if (!signature) {
+      throw new Error('No Stripe signature found');
     }
 
-    return new Response('Method not allowed', { status: 405 });
+    const body = await req.text();
+    const event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
+    console.log('Processing webhook event:', event.type);
+
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        const paymentIntent = event.data.object;
+        const metadata = paymentIntent.metadata;
+        const invoiceId = metadata.invoiceId;
+
+        if (invoiceId) {
+          // Update invoice status to paid
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({
+              status: 'paid',
+              amount_paid: paymentIntent.amount / 100, // Convert from cents to dollars
+              balance_due: 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', invoiceId);
+
+          if (updateError) {
+            throw updateError;
+          }
+
+          // Log the payment activity
+          await supabase
+            .from('invoice_activities')
+            .insert([{
+              invoice_id: invoiceId,
+              activity_type: 'payment_received',
+              description: `Payment received: $${(paymentIntent.amount / 100).toFixed(2)}`,
+            }]);
+        }
+        break;
+
+      case 'payment_intent.payment_failed':
+        const failedPayment = event.data.object;
+        const failedMetadata = failedPayment.metadata;
+        
+        if (failedMetadata.invoiceId) {
+          // Log the failed payment attempt
+          await supabase
+            .from('invoice_activities')
+            .insert([{
+              invoice_id: failedMetadata.invoiceId,
+              activity_type: 'payment_failed',
+              description: `Payment attempt failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`,
+            }]);
+        }
+        break;
+    }
+
+    return new Response(JSON.stringify({ received: true }), {
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 200,
+    });
   } catch (error) {
-    console.error('Error processing webhook:', error);
-    return new Response(error.message, { status: 400 });
+    console.error('Webhook error:', error);
+    return new Response(
+      JSON.stringify({ error: error.message }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 400,
+      }
+    );
   }
 };
 

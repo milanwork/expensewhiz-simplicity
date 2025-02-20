@@ -1,173 +1,155 @@
 
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
+
+const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
+  apiVersion: '2023-10-16',
+});
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-deno-subhost',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface PaymentLinkRequest {
+interface CreatePaymentLinkRequest {
   invoiceId: string;
   amount: number;
   customerEmail: string;
   description: string;
-  invoiceNumber: string;
-  customerName: string;
-}
-
-async function makeStripeRequest(endpoint: string, data: Record<string, any>) {
-  const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-  if (!stripeSecretKey) {
-    throw new Error('Stripe secret key not configured');
-  }
-
-  const formData = new URLSearchParams();
-  Object.entries(data).forEach(([key, value]) => {
-    if (typeof value === 'object') {
-      formData.append(key, JSON.stringify(value));
-    } else {
-      formData.append(key, String(value));
-    }
-  });
-
-  const response = await fetch(`https://api.stripe.com/v1${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${stripeSecretKey}`,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: formData,
-  });
-
-  const responseText = await response.text();
-  
-  try {
-    return JSON.parse(responseText);
-  } catch (error) {
-    console.error(`Invalid JSON response from Stripe ${endpoint}:`, responseText);
-    throw new Error(`Invalid response from Stripe: ${responseText}`);
-  }
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Received request to create-payment-link');
-
-    // Ensure we have a POST request
-    if (req.method !== 'POST') {
-      return new Response(
-        JSON.stringify({ error: 'Method not allowed' }),
-        { 
-          status: 405,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    // Clone the request to ensure we can read it multiple times if needed
-    const clonedReq = req.clone();
+    console.log('Starting create-payment-link function');
     
-    // First try to get the raw body
-    const rawBody = await clonedReq.text();
-    console.log('Raw request body:', rawBody);
-
-    // Parse the body
-    let requestData: PaymentLinkRequest;
-    try {
-      requestData = JSON.parse(rawBody);
-    } catch (error) {
-      console.error('Failed to parse request body:', error);
-      return new Response(
-        JSON.stringify({ 
-          error: 'Invalid request body',
-          details: error.message
-        }),
-        { 
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-        }
-      );
-    }
-
-    // Validate all required fields
-    const requiredFields = ['invoiceId', 'amount', 'customerEmail', 'invoiceNumber', 'customerName'];
-    const missingFields = requiredFields.filter(field => !requestData[field as keyof PaymentLinkRequest]);
+    // Validate request
+    const { invoiceId, amount, customerEmail, description }: CreatePaymentLinkRequest = await req.json();
     
-    if (missingFields.length > 0) {
+    if (!invoiceId || !amount || !customerEmail) {
+      console.error('Missing required fields:', { invoiceId, amount, customerEmail });
       return new Response(
-        JSON.stringify({ 
-          error: 'Missing required fields',
-          missingFields 
-        }),
-        { 
+        JSON.stringify({ error: 'Missing required fields' }),
+        {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
         }
       );
     }
 
-    // Create Stripe product
-    console.log('Creating Stripe product...');
-    const product = await makeStripeRequest('/products', {
-      name: `Invoice ${requestData.invoiceNumber} for ${requestData.customerName}`,
-      description: requestData.description || `Payment for invoice ${requestData.invoiceNumber}`,
+    console.log('Creating product for invoice');
+
+    // First, create a product
+    const product = await stripe.products.create({
+      name: `Invoice ${invoiceId}`,
+      description: description,
       metadata: {
-        invoiceId: requestData.invoiceId,
-        customerEmail: requestData.customerEmail,
-        invoiceNumber: requestData.invoiceNumber,
+        invoiceId: invoiceId,
+        customerEmail: customerEmail,
       },
     });
 
-    // Create price
-    console.log('Creating Stripe price...');
-    const price = await makeStripeRequest('/prices', {
+    console.log('Product created:', product.id);
+
+    // Then, create a price for the product
+    const price = await stripe.prices.create({
       product: product.id,
-      unit_amount: Math.round(requestData.amount * 100),
+      unit_amount: Math.round(amount * 100), // Convert to cents
       currency: 'aud',
+      metadata: {
+        invoiceId: invoiceId,
+        customerEmail: customerEmail,
+      },
     });
 
-    // Create payment link
-    console.log('Creating payment link...');
-    const paymentLink = await makeStripeRequest('/payment_links', {
-      line_items: [{ price: price.id, quantity: 1 }],
+    console.log('Price created:', price.id);
+
+    // Create the payment link using the price ID
+    const paymentLink = await stripe.paymentLinks.create({
+      line_items: [
+        {
+          price: price.id,
+          quantity: 1,
+        },
+      ],
       metadata: {
-        invoiceId: requestData.invoiceId,
-        customerEmail: requestData.customerEmail,
-        invoiceNumber: requestData.invoiceNumber,
+        invoiceId: invoiceId,
+        customerEmail: customerEmail,
       },
       after_completion: {
         type: 'redirect',
         redirect: {
-          url: `${req.headers.get('origin') || ''}/dashboard/invoices/${requestData.invoiceId}?payment=success`,
+          url: `${new URL(req.url).origin}/dashboard/invoices/${invoiceId}?payment=success`,
         },
       },
+      allow_promotion_codes: false,
       billing_address_collection: 'auto',
+      custom_text: {
+        submit: {
+          message: `Thank you for your payment for Invoice ${invoiceId}`,
+        },
+      },
     });
 
-    console.log('Payment link created successfully');
+    console.log('Payment link created successfully:', paymentLink.url);
+
+    // Store the payment link details in metadata
+    await stripe.products.update(product.id, {
+      metadata: {
+        payment_link: paymentLink.url,
+      },
+    });
 
     return new Response(
-      JSON.stringify({ url: paymentLink.url }),
-      { 
+      JSON.stringify({ 
+        url: paymentLink.url,
+        product_id: product.id,
+        price_id: price.id,
+      }),
+      {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
-  } catch (error) {
-    console.error('Error in create-payment-link:', error);
+  } catch (error: any) {
+    console.error('Error in create-payment-link function:', error);
+    
+    // Handle Stripe errors specifically
+    if (error.type && error.type.startsWith('Stripe')) {
+      console.error('Stripe error details:', {
+        type: error.type,
+        code: error.code,
+        param: error.param,
+        message: error.message,
+      });
+      
+      return new Response(
+        JSON.stringify({ 
+          error: error.message,
+          type: error.type,
+          code: error.code,
+          param: error.param,
+        }),
+        {
+          status: 400,
+          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        }
+      );
+    }
+
+    // Handle other errors
     return new Response(
       JSON.stringify({ 
-        error: 'Internal server error',
-        message: error.message 
+        error: error.message || 'Internal server error',
+        details: error.toString(),
       }),
-      { 
+      {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json', ...corsHeaders },
       }
     );
   }

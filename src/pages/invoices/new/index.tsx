@@ -57,7 +57,6 @@ interface Customer {
   company_name: string | null;
   first_name: string | null;
   surname: string | null;
-  billing_email: string | null;
 }
 
 interface Activity {
@@ -93,15 +92,6 @@ interface InvoiceItem {
   amount: number;
   job: string;
   tax_code: string;
-}
-
-interface ShareInvoiceRequest {
-  invoiceId: string;
-  amount: number;
-  customerEmail: string;
-  description: string;
-  invoiceNumber: string;
-  customerName: string;  // Added this field
 }
 
 export default function NewInvoice() {
@@ -340,7 +330,7 @@ export default function NewInvoice() {
 
       const { data: customersList, error } = await supabase
         .from('customers')
-        .select('id, company_name, first_name, surname, billing_email')
+        .select('id, company_name, first_name, surname')
         .eq('business_id', businessProfile.id);
 
       if (error) throw error;
@@ -384,25 +374,6 @@ export default function NewInvoice() {
 
   const totals = calculateTotals();
 
-  const handleShareClick = () => {
-    if (!selectedCustomer) {
-      toast({
-        title: "Error",
-        description: "Please select a customer first",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Find the selected customer's email
-    const customer = customers.find(c => c.id === selectedCustomer);
-    if (customer) {
-      setShareEmail(customer.billing_email || ''); // Use billing email as default
-    }
-    
-    setIsShareDialogOpen(true);
-  };
-
   const handleShareInvoice = async () => {
     if (!existingInvoiceId) {
       toast({
@@ -413,79 +384,28 @@ export default function NewInvoice() {
       return;
     }
 
-    if (!selectedCustomer) {
-      toast({
-        title: "Error",
-        description: "Please select a customer",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (!shareEmail) {
-      toast({
-        title: "Error",
-        description: "Please enter a recipient email",
-        variant: "destructive",
-      });
-      return;
-    }
-
     setIsSending(true);
     try {
-      const selectedCustomerDetails = customers.find(c => c.id === selectedCustomer);
-      if (!selectedCustomerDetails) {
-        throw new Error('Selected customer not found');
-      }
-
-      const customerDisplayName = selectedCustomerDetails.company_name || 
-        `${selectedCustomerDetails.first_name} ${selectedCustomerDetails.surname}`.trim();
-
-      console.log('Creating payment link with data:', {
-        invoiceId: existingInvoiceId,
-        amount: totals.total,
-        customerEmail: shareEmail,
-        description: shareMessage || `Payment for invoice ${invoiceNumber}`,
-        invoiceNumber: invoiceNumber,
-        customerName: customerDisplayName
-      });
-
-      const response = await supabase.functions.invoke('create-payment-link', {
+      const response = await supabase.functions.invoke('send-invoice', {
         body: {
           invoiceId: existingInvoiceId,
-          amount: totals.total,
-          customerEmail: shareEmail,
-          description: shareMessage || `Payment for invoice ${invoiceNumber}`,
-          invoiceNumber: invoiceNumber,
-          customerName: customerDisplayName
-        }
+          recipientEmail: shareEmail,
+          message: shareMessage,
+        },
       });
 
-      console.log('Edge function response:', response);
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      if (!response.data?.url) {
-        throw new Error('No payment URL received');
-      }
-
-      window.open(response.data.url, '_blank');
+      if (response.error) throw new Error(response.error.message);
 
       toast({
         title: "Success",
-        description: "Payment link created successfully",
+        description: "Invoice sent successfully",
       });
-
       setIsShareDialogOpen(false);
-      setShareEmail('');
-      setShareMessage('');
     } catch (error: any) {
-      console.error('Error creating payment link:', error);
+      console.error('Error sharing invoice:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create payment link",
+        description: error.message || "Failed to share invoice",
         variant: "destructive",
       });
     } finally {
@@ -522,7 +442,7 @@ export default function NewInvoice() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={handleShareClick}>
+                  <DropdownMenuItem onClick={() => setIsShareDialogOpen(true)}>
                     <Mail className="mr-2 h-4 w-4" />
                     Email invoice
                   </DropdownMenuItem>
@@ -788,8 +708,8 @@ export default function NewInvoice() {
         </div>
       </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={handleCloseShareDialog}>
-        <DialogContent className="sm:max-w-[425px]">
+      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
             <DialogDescription>
@@ -816,7 +736,7 @@ export default function NewInvoice() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={handleCloseShareDialog}>
+            <Button variant="outline" onClick={() => setIsShareDialogOpen(false)}>
               Cancel
             </Button>
             <Button onClick={handleShareInvoice} disabled={isSending}>
