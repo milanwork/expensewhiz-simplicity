@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 import { Resend } from "npm:resend@2.0.0";
@@ -23,113 +24,112 @@ interface SendInvoiceRequest {
 }
 
 const generatePDF = async (invoice: any, business: any, customer: any) => {
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.width;
-  
-  // Header
-  doc.setFontSize(20);
-  doc.text(business.business_name, 20, 20);
-  doc.setFontSize(10);
-  doc.text(business.address, 20, 30);
-  doc.text(`Phone: ${business.phone}`, 20, 35);
-  doc.text(`Email: ${business.email}`, 20, 40);
-  doc.text(`ABN: ${business.abn}`, 20, 45);
+  try {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.width;
+    
+    // Helper function to safely add text
+    const addText = (text: string, x: number, y: number, options = {}) => {
+      try {
+        doc.text(text?.toString() || '', x, y, options);
+      } catch (error) {
+        console.error(`Error adding text: "${text}" at (${x}, ${y}):`, error);
+      }
+    };
 
-  // Invoice Title
-  doc.setFontSize(16);
-  doc.text("Tax Invoice", 20, 60);
+    // Header Section
+    doc.setFontSize(20);
+    addText(business.business_name || 'Business Name', 20, 20);
 
-  // Invoice Details Table
-  doc.setFontSize(10);
-  const invoiceDetailsY = 70;
-  doc.text("Purchase order no", 20, invoiceDetailsY);
-  doc.text("Invoice number", 80, invoiceDetailsY);
-  doc.text("Issue date", 140, invoiceDetailsY);
-  doc.text("Due date", 180, invoiceDetailsY);
-  
-  doc.text(invoice.customer_po_number, 20, invoiceDetailsY + 5);
-  doc.text(invoice.invoice_number, 80, invoiceDetailsY + 5);
-  doc.text(invoice.issue_date, 140, invoiceDetailsY + 5);
-  doc.text(invoice.due_date, 180, invoiceDetailsY + 5);
+    doc.setFontSize(10);
+    const businessAddress = [
+      business.address_line1,
+      business.address_line2,
+      `${business.city || ''} ${business.state || ''} ${business.postcode || ''}`,
+      business.country
+    ].filter(Boolean).join(', ');
+    addText(businessAddress, 20, 30);
+    addText(`ABN: ${business.abn_acn || ''}`, 20, 35);
 
-  // Billing and Shipping Info
-  const addressY = 90;
-  doc.text("Bill to", 20, addressY);
-  doc.text(customer.company_name, 20, addressY + 5);
-  doc.text(customer.billing_address, 20, addressY + 10);
-  doc.text(`${customer.billing_suburb} ${customer.billing_state} ${customer.billing_postcode}`, 20, addressY + 15);
-  doc.text(customer.billing_country, 20, addressY + 20);
+    // Invoice Title
+    doc.setFontSize(16);
+    addText('Tax Invoice', 20, 45);
 
-  if (customer.shipping_address) {
-    doc.text("Ship to", 120, addressY);
-    doc.text(customer.company_name, 120, addressY + 5);
-    doc.text(customer.shipping_address, 120, addressY + 10);
-    doc.text(`${customer.shipping_suburb} ${customer.shipping_state} ${customer.shipping_postcode}`, 120, addressY + 15);
-    doc.text(customer.shipping_country, 120, addressY + 20);
+    // Invoice Details Section
+    doc.setFontSize(10);
+    const invoiceDetailStartY = 55;
+    addText('Invoice Number:', 20, invoiceDetailStartY);
+    addText(invoice.invoice_number || '', 80, invoiceDetailStartY);
+    addText('Date:', 20, invoiceDetailStartY + 7);
+    addText(invoice.issue_date || '', 80, invoiceDetailStartY + 7);
+    addText('Due Date:', 20, invoiceDetailStartY + 14);
+    addText(invoice.due_date || '', 80, invoiceDetailStartY + 14);
+
+    // Customer Details Section
+    const customerStartY = 85;
+    doc.setFontSize(11);
+    addText('Bill To:', 20, customerStartY);
+    doc.setFontSize(10);
+    addText(customer.company_name || '', 20, customerStartY + 7);
+    addText(customer.billing_address || '', 20, customerStartY + 14);
+    addText(`${customer.billing_suburb || ''} ${customer.billing_state || ''} ${customer.billing_postcode || ''}`, 20, customerStartY + 21);
+    addText(customer.billing_country || '', 20, customerStartY + 28);
+
+    // Items Table Header
+    const tableStartY = 130;
+    doc.setFillColor(240, 240, 240);
+    doc.rect(20, tableStartY - 5, pageWidth - 40, 8, 'F');
+    addText('Description', 20, tableStartY);
+    addText('Amount', pageWidth - 40, tableStartY, { align: 'right' });
+
+    // Items
+    let currentY = tableStartY + 10;
+    invoice.invoice_items?.forEach((item: any) => {
+      addText(item.description || '', 20, currentY);
+      addText(item.amount?.toFixed(2) || '0.00', pageWidth - 40, currentY, { align: 'right' });
+      currentY += 7;
+    });
+
+    // Totals Section
+    const totalsStartY = currentY + 10;
+    addText('Subtotal:', pageWidth - 90, totalsStartY);
+    addText(invoice.subtotal?.toFixed(2) || '0.00', pageWidth - 40, totalsStartY, { align: 'right' });
+
+    addText('Tax:', pageWidth - 90, totalsStartY + 7);
+    addText(invoice.tax?.toFixed(2) || '0.00', pageWidth - 40, totalsStartY + 7, { align: 'right' });
+
+    doc.setFont('helvetica', 'bold');
+    addText('Total Due:', pageWidth - 90, totalsStartY + 14);
+    addText(invoice.total?.toFixed(2) || '0.00', pageWidth - 40, totalsStartY + 14, { align: 'right' });
+    doc.setFont('helvetica', 'normal');
+
+    // Notes Section
+    if (invoice.notes) {
+      const notesY = totalsStartY + 30;
+      addText('Notes:', 20, notesY);
+      doc.setFontSize(9);
+      addText(invoice.notes, 20, notesY + 7);
+    }
+
+    // Payment Details Section
+    const paymentY = doc.internal.pageSize.height - 50;
+    doc.setFontSize(10);
+    addText('Payment Details:', 20, paymentY);
+    addText('Bank: ANZ BANK', 20, paymentY + 7);
+    addText(`Account Name: ${business.business_name || ''}`, 20, paymentY + 14);
+    addText('BSB: 013017', 20, paymentY + 21);
+    addText('Account: 123456789', 20, paymentY + 28);
+
+    // Footer
+    const footerY = doc.internal.pageSize.height - 10;
+    doc.setFontSize(8);
+    addText('Thank you for your business', pageWidth / 2, footerY, { align: 'center' });
+
+    return doc.output('arraybuffer');
+  } catch (error) {
+    console.error('Error generating PDF:', error);
+    throw new Error('Failed to generate PDF: ' + error.message);
   }
-
-  // Items Table
-  const itemsStartY = 130;
-  doc.text("Description", 20, itemsStartY);
-  doc.text("Tax", 140, itemsStartY);
-  doc.text("Amount ($)", 170, itemsStartY);
-
-  let currentY = itemsStartY + 10;
-  invoice.invoice_items.forEach((item: any) => {
-    doc.text(item.description, 20, currentY);
-    doc.text(item.tax_code, 140, currentY);
-    doc.text(item.amount.toFixed(2), 170, currentY);
-    currentY += 7;
-  });
-
-  // Totals
-  const totalsY = currentY + 10;
-  doc.text("Subtotal", 140, totalsY);
-  doc.text(invoice.subtotal.toFixed(2), 170, totalsY);
-  
-  doc.text("Tax", 140, totalsY + 7);
-  doc.text(invoice.tax.toFixed(2), 170, totalsY + 7);
-  
-  doc.text("Total Amount", 140, totalsY + 14);
-  doc.text(invoice.total.toFixed(2), 170, totalsY + 14);
-  
-  doc.text("Amount Paid", 140, totalsY + 21);
-  doc.text(invoice.amount_paid.toFixed(2), 170, totalsY + 21);
-  
-  doc.setFont("helvetica", "bold");
-  doc.text("Balance Due", 140, totalsY + 28);
-  doc.text(invoice.balance_due.toFixed(2), 170, totalsY + 28);
-  doc.setFont("helvetica", "normal");
-
-  // Notes
-  if (invoice.notes) {
-    doc.text("Notes:", 20, totalsY + 40);
-    doc.text(invoice.notes, 20, totalsY + 47);
-  }
-
-  // Payment Methods
-  const paymentY = totalsY + 70;
-  doc.text("How to pay", 20, paymentY);
-  
-  // Generate QR Code
-  const qrCodeUrl = await QRCode.toDataURL(`https://example.com/invoices/${invoice.invoice_number}`);
-  doc.addImage(qrCodeUrl, 'PNG', 20, paymentY + 10, 30, 30);
-  
-  // Bank Details
-  doc.text("Bank deposit", 70, paymentY);
-  doc.text("Bank: ANZ BANK", 70, paymentY + 10);
-  doc.text(`Name: ${business.business_name}`, 70, paymentY + 15);
-  doc.text("BSB: 013017", 70, paymentY + 20);
-  doc.text("ACC: 123456789", 70, paymentY + 25);
-  doc.text(`Ref: ${invoice.invoice_number}`, 70, paymentY + 30);
-
-  // Footer
-  const footerY = doc.internal.pageSize.height - 10;
-  doc.text(`Page 1 of 1`, 20, footerY);
-  doc.text(`Invoice no: ${invoice.invoice_number}`, pageWidth/2 - 20, footerY);
-  doc.text(`Due date: ${invoice.due_date}`, pageWidth - 60, footerY);
-
-  return doc.output('arraybuffer');
 };
 
 const handler = async (req: Request): Promise<Response> => {
@@ -140,13 +140,13 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { invoiceId, recipientEmail, message } = await req.json() as SendInvoiceRequest;
 
-    // Fetch invoice details
+    // Fetch invoice details with all related data
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .select(`
         *,
-        customers (*),
-        business_profiles (*),
+        customers:customer_id (*),
+        business_profiles:business_id (*),
         invoice_items (*)
       `)
       .eq('id', invoiceId)
@@ -156,6 +156,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Invoice not found');
     }
 
+    console.log('Generating PDF for invoice:', invoice.invoice_number);
+
     // Generate PDF
     const pdfBuffer = await generatePDF(invoice, invoice.business_profiles, invoice.customers);
     const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
@@ -164,7 +166,7 @@ const handler = async (req: Request): Promise<Response> => {
     const htmlContent = `
       <html>
         <body>
-          <h2>Invoice from ${invoice.business_profiles.business_name || 'Our Company'}</h2>
+          <h2>Invoice from ${invoice.business_profiles?.business_name || 'Our Company'}</h2>
           ${message ? `<p>${message}</p>` : ''}
           <p>Invoice Number: ${invoice.invoice_number}</p>
           <p>Due Date: ${invoice.due_date}</p>
@@ -176,10 +178,12 @@ const handler = async (req: Request): Promise<Response> => {
       </html>
     `;
 
+    console.log('Sending email to:', recipientEmail);
+
     const emailResponse = await resend.emails.send({
       from: "Invoices <onboarding@resend.dev>",
       to: [recipientEmail],
-      subject: `Invoice ${invoice.invoice_number} from ${invoice.business_profiles.business_name || 'Our Company'}`,
+      subject: `Invoice ${invoice.invoice_number} from ${invoice.business_profiles?.business_name || 'Our Company'}`,
       html: htmlContent,
       attachments: [
         {
