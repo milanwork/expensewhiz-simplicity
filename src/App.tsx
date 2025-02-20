@@ -21,9 +21,11 @@ function App() {
           <Route path="/dashboard/contacts" element={<Contacts />} />
           <Route path="/dashboard/contacts/new" element={<ContactForm />} />
           <Route path="/dashboard/contacts/:id" element={<ContactForm />} />
-          <Route path="/dashboard/invoices" element={<Invoices />} />
-          <Route path="/dashboard/invoices/new" element={<NewInvoice />} />
-          <Route path="/dashboard/invoices/:id" element={<ViewInvoice />} />
+          <Route path="/dashboard/invoices" element={<Invoices />}>
+            <Route index element={<Invoices />} />
+            <Route path="new" element={<NewInvoice />} />
+            <Route path=":id" element={<ViewInvoice />} />
+          </Route>
           <Route path="/dashboard/profile" element={<Profile />} />
         </Route>
       </Routes>
