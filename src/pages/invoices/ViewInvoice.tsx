@@ -12,55 +12,10 @@ import {
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/components/ui/use-toast";
-import { ArrowLeft, Share2, Save, Send, MoreHorizontal, ChevronRight, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { format } from "date-fns";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
-
-interface Customer {
-  id: string;
-  company_name: string;
-  first_name: string;
-  surname: string;
-  billing_email: string;
-}
-
-interface InvoiceItem {
-  id?: string;
-  description: string;
-  category: string;
-  amount: number;
-  job: string;
-  tax_code: string;
-}
-
-interface Invoice {
-  id: string;
-  invoice_number: string;
-  customer_po_number: string;
-  issue_date: string;
-  due_date: string;
-  notes: string;
-  subtotal: number;
-  tax: number;
-  total: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  is_tax_inclusive: boolean;
-  customer: Customer;
-  items: InvoiceItem[];
-}
-
-interface Activity {
-  id: string;
-  activity_type: string;
-  description: string;
-  created_at: string;
-}
+import { Invoice, InvoiceItem, Customer, Activity } from "./types";
+import { ActivityLog } from "./components/ActivityLog";
+import { InvoiceHeader } from "./components/InvoiceHeader";
 
 export default function ViewInvoice() {
   const { id } = useParams();
@@ -94,6 +49,46 @@ export default function ViewInvoice() {
       setIsLoading(false);
     }
   }, [id]);
+
+  const fetchCustomers = async () => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
+
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!businessProfile) {
+        toast({
+          title: "Error",
+          description: "Business profile not found",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      const { data: customersData, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('business_id', businessProfile.id);
+
+      if (error) throw error;
+      setCustomers(customersData || []);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load customers",
+        variant: "destructive",
+      });
+    }
+  };
 
   const fetchActivities = async () => {
     if (!id) return;
@@ -351,35 +346,13 @@ export default function ViewInvoice() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center space-x-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate("/dashboard/invoices")}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <h1 className="text-2xl font-semibold">
-            {id ? `Invoice #${invoiceNumber}` : 'Create Invoice'}
-          </h1>
-        </div>
-        <div className="flex items-center space-x-2">
-          {id && (
-            <Button variant="outline" onClick={handleShare}>
-              <Share2 className="mr-2 h-4 w-4" />
-              Share
-            </Button>
-          )}
-          <Button onClick={handleSave} disabled={isLoading}>
-            <Save className="mr-2 h-4 w-4" />
-            Save
-          </Button>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
+      <InvoiceHeader 
+        invoiceNumber={invoiceNumber}
+        onNavigateBack={() => navigate("/dashboard/invoices")}
+        onShare={id ? handleShare : undefined}
+        onSave={handleSave}
+        isLoading={isLoading}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         <div className="lg:col-span-3 space-y-8">
@@ -523,46 +496,11 @@ export default function ViewInvoice() {
 
         {id && (
           <div className="lg:col-span-1">
-            <Collapsible
-              open={isActivityLogOpen}
+            <ActivityLog 
+              activities={activities}
+              isOpen={isActivityLogOpen}
               onOpenChange={setIsActivityLogOpen}
-              className="bg-white rounded-lg shadow"
-            >
-              <div className="p-4 flex items-center justify-between">
-                <h3 className="text-lg font-semibold">Activity Log</h3>
-                <CollapsibleTrigger asChild>
-                  <Button variant="ghost" size="sm" className="w-9 p-0">
-                    {isActivityLogOpen ? (
-                      <ChevronDown className="h-4 w-4" />
-                    ) : (
-                      <ChevronRight className="h-4 w-4" />
-                    )}
-                  </Button>
-                </CollapsibleTrigger>
-              </div>
-              <CollapsibleContent>
-                <div className="px-4 pb-4">
-                  <ScrollArea className="h-[600px]">
-                    <div className="space-y-4">
-                      {activities.map((activity) => (
-                        <div key={activity.id} className="border-b pb-4">
-                          <div className="text-sm font-medium">{activity.activity_type}</div>
-                          <div className="text-sm text-gray-600">{activity.description}</div>
-                          <div className="text-xs text-gray-400 mt-1">
-                            {format(new Date(activity.created_at), 'MMM d, yyyy h:mm a')}
-                          </div>
-                        </div>
-                      ))}
-                      {activities.length === 0 && (
-                        <div className="text-sm text-gray-500 text-center">
-                          No activities yet
-                        </div>
-                      )}
-                    </div>
-                  </ScrollArea>
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+            />
           </div>
         )}
       </div>
