@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save } from "lucide-react";
@@ -49,6 +48,7 @@ interface Activity {
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -87,6 +87,7 @@ export default function NewInvoice() {
         if (editInvoiceData) {
           const invoiceData = JSON.parse(editInvoiceData);
           // Populate the form with existing invoice data
+          setExistingInvoiceId(invoiceData.id);
           setSelectedCustomer(invoiceData.customer_id);
           setInvoiceNumber(invoiceData.invoice_number);
           setCustomerPO(invoiceData.customer_po_number || '');
@@ -196,58 +197,83 @@ export default function NewInvoice() {
 
       const { subtotal, tax, total } = calculateTotals();
 
-      const { data: invoice, error: invoiceError } = await supabase
-        .from('invoices')
-        .insert([{
-          business_id: businessProfile.id,
-          customer_id: selectedCustomer,
-          invoice_number: invoiceNumber,
-          customer_po_number: customerPO,
-          issue_date: issueDate,
-          due_date: dueDate,
-          notes,
-          subtotal,
-          tax,
-          total,
-          amount_paid: 0,
-          balance_due: total,
-          is_tax_inclusive: isTaxInclusive,
-          status: 'draft'
-        }])
-        .select()
-        .single();
+      const invoiceData = {
+        business_id: businessProfile.id,
+        customer_id: selectedCustomer,
+        invoice_number: invoiceNumber,
+        customer_po_number: customerPO,
+        issue_date: issueDate,
+        due_date: dueDate,
+        notes,
+        subtotal,
+        tax,
+        total,
+        amount_paid: 0,
+        balance_due: total,
+        is_tax_inclusive: isTaxInclusive,
+        status: 'draft'
+      };
 
-      if (invoiceError) throw invoiceError;
+      let invoiceId;
 
-      if (invoice) {
-        const { error: itemsError } = await supabase
+      if (existingInvoiceId) {
+        // Update existing invoice
+        const { data: updatedInvoice, error: updateError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', existingInvoiceId)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+        invoiceId = existingInvoiceId;
+
+        // Delete existing items
+        await supabase
           .from('invoice_items')
-          .insert(
-            items.map(item => ({
-              invoice_id: invoice.id,
-              ...item
-            }))
-          );
+          .delete()
+          .eq('invoice_id', existingInvoiceId);
+      } else {
+        // Create new invoice
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert([invoiceData])
+          .select()
+          .single();
 
-        if (itemsError) throw itemsError;
-
-        await supabase.from('invoice_activities').insert([{
-          invoice_id: invoice.id,
-          activity_type: 'create',
-          description: 'Invoice created'
-        }]);
-
-        toast({
-          title: "Success",
-          description: "Invoice created successfully",
-        });
-        navigate("/dashboard/invoices");
+        if (invoiceError) throw invoiceError;
+        invoiceId = newInvoice.id;
       }
+
+      // Insert new items
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(
+          items.map(item => ({
+            invoice_id: invoiceId,
+            ...item
+          }))
+        );
+
+      if (itemsError) throw itemsError;
+
+      // Add activity
+      await supabase.from('invoice_activities').insert([{
+        invoice_id: invoiceId,
+        activity_type: existingInvoiceId ? 'update' : 'create',
+        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created'
+      }]);
+
+      toast({
+        title: "Success",
+        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
+      });
+      navigate("/dashboard/invoices");
     } catch (error: any) {
-      console.error('Error creating invoice:', error);
+      console.error('Error saving invoice:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create invoice",
+        description: error.message || "Failed to save invoice",
         variant: "destructive",
       });
     } finally {
