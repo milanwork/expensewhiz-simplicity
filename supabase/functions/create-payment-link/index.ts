@@ -30,7 +30,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Create a Payment Intent first to attach metadata
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100),
+      amount: Math.round(amount * 100), // Convert to cents
       currency: 'aud',
       metadata: {
         invoiceId: invoiceId,
@@ -46,7 +46,7 @@ const handler = async (req: Request): Promise<Response> => {
               name: `Invoice ${invoiceId}`,
               description: description,
             },
-            unit_amount: Math.round(amount * 100),
+            unit_amount: Math.round(amount * 100), // Convert to cents
           },
           quantity: 1,
         },
