@@ -41,59 +41,75 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log('Creating payment intent with metadata:', { invoiceId, amount });
+    console.log('Creating product for invoice');
 
-    // Create a Payment Intent first to attach metadata
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(amount * 100), // Convert to cents
-      currency: 'aud',
+    // First, create a product
+    const product = await stripe.products.create({
+      name: `Invoice ${invoiceId}`,
+      description: description,
       metadata: {
         invoiceId: invoiceId,
-        customerEmail: customerEmail, // Store email in metadata
+        customerEmail: customerEmail,
       },
     });
 
-    console.log('Payment intent created:', paymentIntent.id);
+    console.log('Product created:', product.id);
 
-    console.log('Creating payment link with config:', {
-      amount: Math.round(amount * 100),
-      description,
+    // Then, create a price for the product
+    const price = await stripe.prices.create({
+      product: product.id,
+      unit_amount: Math.round(amount * 100), // Convert to cents
+      currency: 'aud',
+      metadata: {
+        invoiceId: invoiceId,
+        customerEmail: customerEmail,
+      },
     });
 
+    console.log('Price created:', price.id);
+
+    // Create the payment link using the price ID
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
         {
-          price_data: {
-            currency: 'aud',
-            product_data: {
-              name: `Invoice ${invoiceId}`,
-              description: description,
-            },
-            unit_amount: Math.round(amount * 100), // Convert to cents
-          },
+          price: price.id,
           quantity: 1,
         },
       ],
+      metadata: {
+        invoiceId: invoiceId,
+        customerEmail: customerEmail,
+      },
       after_completion: {
         type: 'redirect',
         redirect: {
           url: `${new URL(req.url).origin}/dashboard/invoices/${invoiceId}?payment=success`,
         },
       },
-      payment_intent_data: {
-        metadata: {
-          invoiceId: invoiceId,
-          customerEmail: customerEmail,
+      allow_promotion_codes: false,
+      billing_address_collection: 'auto',
+      custom_text: {
+        submit: {
+          message: `Thank you for your payment for Invoice ${invoiceId}`,
         },
       },
-      automatic_tax: { enabled: false },
-      invoice_creation: { enabled: true },
     });
 
     console.log('Payment link created successfully:', paymentLink.url);
 
+    // Store the payment link details in metadata
+    await stripe.products.update(product.id, {
+      metadata: {
+        payment_link: paymentLink.url,
+      },
+    });
+
     return new Response(
-      JSON.stringify({ url: paymentLink.url }),
+      JSON.stringify({ 
+        url: paymentLink.url,
+        product_id: product.id,
+        price_id: price.id,
+      }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -104,11 +120,19 @@ const handler = async (req: Request): Promise<Response> => {
     
     // Handle Stripe errors specifically
     if (error.type && error.type.startsWith('Stripe')) {
+      console.error('Stripe error details:', {
+        type: error.type,
+        code: error.code,
+        param: error.param,
+        message: error.message,
+      });
+      
       return new Response(
         JSON.stringify({ 
           error: error.message,
           type: error.type,
-          code: error.code 
+          code: error.code,
+          param: error.param,
         }),
         {
           status: 400,
@@ -119,7 +143,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Handle other errors
     return new Response(
-      JSON.stringify({ error: error.message || 'Internal server error' }),
+      JSON.stringify({ 
+        error: error.message || 'Internal server error',
+        details: error.toString(),
+      }),
       {
         status: 500,
         headers: { 'Content-Type': 'application/json', ...corsHeaders },
