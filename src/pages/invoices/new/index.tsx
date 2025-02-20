@@ -187,7 +187,18 @@ export default function NewInvoice() {
       let invoiceId: string;
 
       if (existingInvoiceId) {
-        // Update existing invoice
+        // First, delete existing items
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', existingInvoiceId);
+
+        if (deleteError) {
+          console.error('Error deleting existing items:', deleteError);
+          throw new Error('Failed to delete existing items');
+        }
+
+        // Then update the invoice
         const { error: updateError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -195,14 +206,6 @@ export default function NewInvoice() {
 
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
-
-        // Delete all existing items for this invoice
-        const { error: deleteError } = await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', existingInvoiceId);
-
-        if (deleteError) throw deleteError;
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -216,22 +219,26 @@ export default function NewInvoice() {
         invoiceId = newInvoice.id;
       }
 
-      // Insert new items without IDs to prevent duplicates
+      // Only insert items if we have any
       if (items.length > 0) {
-        const cleanedItems = items.map(item => ({
+        // Create new items array without any existing IDs
+        const newItems = items.map(item => ({
           invoice_id: invoiceId,
-          description: item.description,
-          category: item.category,
-          amount: item.amount,
-          job: item.job || null,
-          tax_code: item.tax_code
+          description: item.description || '',
+          category: item.category || '4-1400 Sales',
+          amount: Number(item.amount) || 0,
+          job: item.job || '',
+          tax_code: item.tax_code || 'GST'
         }));
 
         const { error: itemsError } = await supabase
           .from('invoice_items')
-          .insert(cleanedItems);
+          .insert(newItems);
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error('Error inserting items:', itemsError);
+          throw new Error('Failed to insert invoice items');
+        }
       }
 
       // Add activity log entry
@@ -251,21 +258,25 @@ export default function NewInvoice() {
         description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
       });
 
-      // Refresh the data instead of navigating away
+      // Refresh the data without navigating away
       if (existingInvoiceId) {
         const { data: refreshedInvoice } = await supabase
           .from('invoices')
           .select(`
             *,
-            items:invoice_items(*)
+            invoice_items (*)
           `)
           .eq('id', existingInvoiceId)
           .single();
 
         if (refreshedInvoice) {
-          setItems(refreshedInvoice.items || []);
+          setItems(refreshedInvoice.invoice_items || []);
         }
+      } else {
+        // Clear the form or reset to initial state for new invoices
+        setItems([{ description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" }]);
       }
+
     } catch (error: any) {
       console.error('Error saving invoice:', error);
       toast({
