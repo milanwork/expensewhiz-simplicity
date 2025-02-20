@@ -455,6 +455,13 @@ export default function NewInvoice() {
     }
   };
 
+  const handleCloseShareDialog = () => {
+    setIsShareDialogOpen(false);
+    setShareEmail('');
+    setShareMessage('');
+    setIsSending(false);
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
@@ -750,8 +757,8 @@ export default function NewInvoice() {
         </div>
       </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <DialogContent>
+      <Dialog open={isShareDialogOpen} onOpenChange={handleCloseShareDialog}>
+        <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
             <DialogDescription>
@@ -778,7 +785,7 @@ export default function NewInvoice() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsShareDialogOpen(false)}>
+            <Button variant="outline" onClick={handleCloseShareDialog}>
               Cancel
             </Button>
             <Button onClick={handleShareInvoice} disabled={isSending}>
