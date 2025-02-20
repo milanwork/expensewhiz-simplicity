@@ -386,11 +386,20 @@ export default function NewInvoice() {
 
     setIsSending(true);
     try {
-      const response = await supabase.functions.invoke('send-invoice', {
+      console.log('Sharing invoice with data:', {
+        invoiceId: existingInvoiceId,
+        invoiceNumber,
+        recipientEmail: shareEmail,
+        message: shareMessage,
+      });
+
+      const response = await supabase.functions.invoke('create-payment-link', {
         body: {
           invoiceId: existingInvoiceId,
-          recipientEmail: shareEmail,
-          message: shareMessage,
+          amount: totals.total,
+          customerEmail: shareEmail,
+          description: shareMessage || `Payment for invoice ${invoiceNumber}`,
+          invoiceNumber: invoiceNumber, // Added this line to pass the invoice number
         },
       });
 
