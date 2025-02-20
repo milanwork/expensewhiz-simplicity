@@ -17,6 +17,7 @@ import {
   HelpCircle,
   LogOut,
   Users,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/components/ui/use-toast";
@@ -54,7 +55,6 @@ const Dashboard = () => {
 
         setUser(user);
         
-        // Fetch user profile without headers that might cause cloning issues
         const { data: profileData } = await supabase
           .from('profiles')
           .select('*')
@@ -104,6 +104,7 @@ const Dashboard = () => {
   ];
 
   const bottomMenuItems = [
+    { icon: UserCog, label: "Manage Account", path: "/dashboard/profile" },
     { icon: HelpCircle, label: "Help and Support", path: "/dashboard/support" },
     { icon: Bell, label: "Notifications", path: "/dashboard/notifications", badge: "9+" },
     { icon: Settings, label: "Settings", path: "/dashboard/settings" },
@@ -216,3 +217,4 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
+
