@@ -51,16 +51,32 @@ export default function CreateInvoice() {
   ]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isInitializing, setIsInitializing] = useState(true);
 
   useEffect(() => {
-    fetchCustomers();
-    generateInvoiceNumber();
+    const initialize = async () => {
+      try {
+        await Promise.all([
+          fetchCustomers(),
+          generateInvoiceNumber()
+        ]);
+      } catch (error) {
+        console.error('Initialization error:', error);
+      } finally {
+        setIsInitializing(false);
+      }
+    };
+
+    initialize();
   }, []);
 
   const fetchCustomers = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        navigate('/auth');
+        return;
+      }
 
       const { data: businessProfile } = await supabase
         .from('business_profiles')
@@ -68,15 +84,17 @@ export default function CreateInvoice() {
         .eq('user_id', user.id)
         .single();
 
-      if (businessProfile) {
-        const { data: customersList, error } = await supabase
-          .from('customers')
-          .select('id, company_name, first_name, surname')
-          .eq('business_id', businessProfile.id);
-
-        if (error) throw error;
-        setCustomers(customersList || []);
+      if (!businessProfile) {
+        throw new Error('Business profile not found');
       }
+
+      const { data: customersList, error } = await supabase
+        .from('customers')
+        .select('id, company_name, first_name, surname')
+        .eq('business_id', businessProfile.id);
+
+      if (error) throw error;
+      setCustomers(customersList || []);
     } catch (error) {
       console.error('Error fetching customers:', error);
       toast({
@@ -88,9 +106,19 @@ export default function CreateInvoice() {
   };
 
   const generateInvoiceNumber = async () => {
-    // Simple invoice number generation - you might want to make this more sophisticated
-    const number = Math.floor(Math.random() * 9000000) + 1000000;
-    setInvoiceNumber(number.toString());
+    try {
+      const timestamp = Date.now();
+      const randomNum = Math.floor(Math.random() * 1000);
+      const newInvoiceNumber = `INV-${timestamp}-${randomNum}`;
+      setInvoiceNumber(newInvoiceNumber);
+    } catch (error) {
+      console.error('Error generating invoice number:', error);
+      toast({
+        title: "Error",
+        description: "Failed to generate invoice number",
+        variant: "destructive",
+      });
+    }
   };
 
   const addItem = () => {
@@ -108,12 +136,21 @@ export default function CreateInvoice() {
 
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
-    const tax = subtotal * 0.1; // Assuming 10% tax rate
-    const total = subtotal + tax;
-    return { subtotal, tax, total };
+    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
+    const total = isTaxInclusive ? subtotal : (subtotal + tax);
+    return { subtotal: Number(subtotal.toFixed(2)), tax: Number(tax.toFixed(2)), total: Number(total.toFixed(2)) };
   };
 
   const handleSubmit = async () => {
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Please select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -161,6 +198,12 @@ export default function CreateInvoice() {
           );
 
         if (itemsError) throw itemsError;
+
+        await supabase.from('invoice_activities').insert([{
+          invoice_id: invoice.id,
+          activity_type: 'create',
+          description: 'Invoice created'
+        }]);
       }
 
       toast({
@@ -180,6 +223,17 @@ export default function CreateInvoice() {
     }
   };
 
+  if (isInitializing) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="text-lg font-medium">Loading...</div>
+          <div className="text-sm text-gray-500">Please wait while we initialize the invoice</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-5xl mx-auto py-6 space-y-8">
       <div className="flex items-center justify-between">
@@ -194,8 +248,6 @@ export default function CreateInvoice() {
           <h1 className="text-2xl font-semibold">Create invoice</h1>
         </div>
         <div className="flex items-center space-x-2">
-          <Button variant="ghost">Preview</Button>
-          <Button variant="ghost">Share</Button>
           <Button onClick={handleSubmit} disabled={isLoading}>
             <Save className="mr-2 h-4 w-4" />
             Save
@@ -229,7 +281,7 @@ export default function CreateInvoice() {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label>Invoice number *</Label>
-              <Input value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+              <Input value={invoiceNumber} readOnly className="bg-gray-50" />
             </div>
             <div>
               <Label>Customer PO number</Label>
@@ -275,7 +327,6 @@ export default function CreateInvoice() {
               <th className="pb-2">Amount ($) *</th>
               <th className="pb-2">Job</th>
               <th className="pb-2">Tax code *</th>
-              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -338,10 +389,6 @@ export default function CreateInvoice() {
       <div className="space-y-4">
         <div>
           <Label>Notes to customer</Label>
-          <div className="flex items-center space-x-2 mb-2">
-            <Checkbox id="saveDefault" />
-            <label htmlFor="saveDefault">Save as default</label>
-          </div>
           <Input
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
@@ -352,18 +399,22 @@ export default function CreateInvoice() {
 
       <div className="flex justify-end space-y-2">
         <div className="w-64">
-          <div className="flex justify-between py-1">
-            <span>Subtotal</span>
-            <span>${calculateTotals().subtotal.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between py-1">
-            <span>Tax</span>
-            <span>${calculateTotals().tax.toFixed(2)}</span>
-          </div>
-          <div className="flex justify-between py-1 font-semibold">
-            <span>Total</span>
-            <span>${calculateTotals().total.toFixed(2)}</span>
-          </div>
+          {items.length > 0 && (
+            <>
+              <div className="flex justify-between py-1">
+                <span>Subtotal</span>
+                <span>${calculateTotals().subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span>Tax</span>
+                <span>${calculateTotals().tax.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1 font-semibold">
+                <span>Total</span>
+                <span>${calculateTotals().total.toFixed(2)}</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
     </div>
