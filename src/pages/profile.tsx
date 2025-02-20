@@ -33,7 +33,6 @@ const Profile = () => {
   
   // Business Details State
   const [businessName, setBusinessName] = useState("");
-  const [tradingName, setTradingName] = useState("");
   const [abn, setAbn] = useState("");
   const [gstBranchNumber, setGstBranchNumber] = useState("");
   const [acn, setAcn] = useState("");
@@ -190,30 +189,12 @@ const Profile = () => {
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Business Details</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Added grid layout */}
                   <div>
-                    <Label htmlFor="myobSerialNumber">MYOB serial number</Label>
-                    <Input
-                      id="myobSerialNumber"
-                      value="614405472911"
-                      readOnly
-                      className="bg-gray-50"
-                    />
-                  </div>
-                  <div>
                     <Label htmlFor="businessName">Business name*</Label>
                     <Input
                       id="businessName"
                       value={businessName}
                       onChange={(e) => setBusinessName(e.target.value)}
                       placeholder="Enter business name"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tradingName">Trading name</Label>
-                    <Input
-                      id="tradingName"
-                      value={tradingName}
-                      onChange={(e) => setTradingName(e.target.value)}
-                      placeholder="Enter trading name"
                     />
                   </div>
                   <div>
