@@ -53,7 +53,7 @@ export default function NewInvoice() {
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerPO, setCustomerPO] = useState("");
-  const [issueDate] = useState(new Date().toISOString().split("T")[0]);
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
