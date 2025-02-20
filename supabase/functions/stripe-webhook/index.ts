@@ -18,7 +18,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
 };
 
-const handler = async (req: Request): Promise<Response> => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -34,53 +34,115 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Processing webhook event:', event.type);
 
     switch (event.type) {
-      case 'payment_intent.succeeded':
-        const paymentIntent = event.data.object;
-        const metadata = paymentIntent.metadata;
-        const invoiceId = metadata.invoiceId;
+      case 'checkout.session.completed': {
+        const session = event.data.object;
+        const metadata = session.metadata;
+        const invoiceId = metadata?.invoiceId;
+        const amountPaid = session.amount_total / 100; // Convert from cents to dollars
 
         if (invoiceId) {
+          console.log(`Updating invoice ${invoiceId} to paid status`);
+          
           // Update invoice status to paid
           const { error: updateError } = await supabase
             .from('invoices')
             .update({
               status: 'paid',
-              amount_paid: paymentIntent.amount / 100, // Convert from cents to dollars
+              amount_paid: amountPaid,
               balance_due: 0,
               updated_at: new Date().toISOString()
             })
             .eq('id', invoiceId);
 
           if (updateError) {
+            console.error('Error updating invoice:', updateError);
             throw updateError;
           }
 
           // Log the payment activity
-          await supabase
+          const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
               invoice_id: invoiceId,
               activity_type: 'payment_received',
-              description: `Payment received: $${(paymentIntent.amount / 100).toFixed(2)}`,
+              description: `Payment received: $${amountPaid.toFixed(2)}`,
             }]);
+
+          if (activityError) {
+            console.error('Error logging activity:', activityError);
+            throw activityError;
+          }
+
+          console.log('Successfully updated invoice to paid status');
         }
         break;
+      }
 
-      case 'payment_intent.payment_failed':
-        const failedPayment = event.data.object;
-        const failedMetadata = failedPayment.metadata;
-        
-        if (failedMetadata.invoiceId) {
-          // Log the failed payment attempt
-          await supabase
+      case 'payment_intent.succeeded': {
+        const paymentIntent = event.data.object;
+        const metadata = paymentIntent.metadata;
+        const invoiceId = metadata?.invoiceId;
+        const amountPaid = paymentIntent.amount / 100; // Convert from cents to dollars
+
+        if (invoiceId) {
+          console.log(`Updating invoice ${invoiceId} to paid status`);
+          
+          // Update invoice status to paid
+          const { error: updateError } = await supabase
+            .from('invoices')
+            .update({
+              status: 'paid',
+              amount_paid: amountPaid,
+              balance_due: 0,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', invoiceId);
+
+          if (updateError) {
+            console.error('Error updating invoice:', updateError);
+            throw updateError;
+          }
+
+          // Log the payment activity
+          const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
-              invoice_id: failedMetadata.invoiceId,
+              invoice_id: invoiceId,
+              activity_type: 'payment_received',
+              description: `Payment received: $${amountPaid.toFixed(2)}`,
+            }]);
+
+          if (activityError) {
+            console.error('Error logging activity:', activityError);
+            throw activityError;
+          }
+
+          console.log('Successfully updated invoice to paid status');
+        }
+        break;
+      }
+
+      case 'payment_intent.payment_failed': {
+        const failedPayment = event.data.object;
+        const metadata = failedPayment.metadata;
+        
+        if (metadata?.invoiceId) {
+          // Log the failed payment attempt
+          const { error: activityError } = await supabase
+            .from('invoice_activities')
+            .insert([{
+              invoice_id: metadata.invoiceId,
               activity_type: 'payment_failed',
               description: `Payment attempt failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`,
             }]);
+
+          if (activityError) {
+            console.error('Error logging failed payment activity:', activityError);
+            throw activityError;
+          }
         }
         break;
+      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -97,6 +159,4 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
   }
-};
-
-serve(handler);
+});
