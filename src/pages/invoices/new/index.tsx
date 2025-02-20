@@ -1,6 +1,19 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save, Trash2, Plus } from "lucide-react";
+import { 
+  ArrowLeft, 
+  ChevronDown, 
+  ChevronRight, 
+  MoreHorizontal, 
+  Save, 
+  Trash2, 
+  Plus, 
+  Mail,
+  Download,
+  Link,
+  Printer,
+  Share
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,6 +24,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
@@ -22,6 +50,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 
 interface Customer {
   id: string;
@@ -92,6 +121,10 @@ export default function NewInvoice() {
       created_at: new Date().toISOString(),
     },
   ]);
+  const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
+  const [shareEmail, setShareEmail] = useState("");
+  const [shareMessage, setShareMessage] = useState("");
+  const [isSending, setIsSending] = useState(false);
 
   useEffect(() => {
     const initialize = async () => {
@@ -341,6 +374,45 @@ export default function NewInvoice() {
 
   const totals = calculateTotals();
 
+  const handleShareInvoice = async () => {
+    if (!existingInvoiceId) {
+      toast({
+        title: "Error",
+        description: "Please save the invoice first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      const response = await supabase.functions.invoke('send-invoice', {
+        body: {
+          invoiceId: existingInvoiceId,
+          recipientEmail: shareEmail,
+          message: shareMessage,
+        },
+      });
+
+      if (response.error) throw new Error(response.error.message);
+
+      toast({
+        title: "Success",
+        description: "Invoice sent successfully",
+      });
+      setIsShareDialogOpen(false);
+    } catch (error: any) {
+      console.error('Error sharing invoice:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to share invoice",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
@@ -361,18 +433,45 @@ export default function NewInvoice() {
         </div>
         <div className="flex items-center space-x-2">
           {existingInvoiceId && (
-            <Button 
-              variant="outline"
-              onClick={() => {
-                // TODO: Implement record payment
-                toast({
-                  title: "Coming Soon",
-                  description: "Record payment functionality will be added soon",
-                });
-              }}
-            >
-              Record Payment
-            </Button>
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <Share className="mr-2 h-4 w-4" />
+                    Share
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsShareDialogOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email invoice
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Link className="mr-2 h-4 w-4" />
+                    Copy link
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  toast({
+                    title: "Coming Soon",
+                    description: "Record payment functionality will be added soon",
+                  });
+                }}
+              >
+                Record Payment
+              </Button>
+            </>
           )}
           <Button onClick={handleSubmit} disabled={isLoading}>
             <Save className="mr-2 h-4 w-4" />
@@ -608,6 +707,44 @@ export default function NewInvoice() {
           </Collapsible>
         </div>
       </div>
+
+      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Share Invoice</DialogTitle>
+            <DialogDescription>
+              Send this invoice via email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Recipient Email</Label>
+              <Input
+                type="email"
+                placeholder="Enter email address"
+                value={shareEmail}
+                onChange={(e) => setShareEmail(e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Message (optional)</Label>
+              <Textarea
+                placeholder="Add a message to your invoice"
+                value={shareMessage}
+                onChange={(e) => setShareMessage(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsShareDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleShareInvoice} disabled={isSending}>
+              {isSending ? "Sending..." : "Send Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
