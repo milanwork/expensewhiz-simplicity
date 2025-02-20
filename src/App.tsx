@@ -7,7 +7,6 @@ import Profile from "./pages/profile";
 import Contacts from "./pages/contacts";
 import ContactForm from "./pages/contacts/ContactForm";
 import Invoices from "./pages/invoices";
-import ViewInvoice from "./pages/invoices/ViewInvoice";
 import NewInvoice from "./pages/invoices/new";
 import { Toaster } from "@/components/ui/toaster";
 
@@ -23,7 +22,6 @@ function App() {
           <Route path="contacts/:id" element={<ContactForm />} />
           <Route path="invoices" element={<Invoices />} />
           <Route path="invoices/new" element={<NewInvoice />} />
-          <Route path="invoices/:id" element={<ViewInvoice />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
