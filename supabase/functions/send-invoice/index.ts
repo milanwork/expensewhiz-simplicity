@@ -28,7 +28,7 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { invoiceId, recipientEmail, message } = await req.json() as SendInvoiceRequest;
 
-    // Fetch invoice details
+    // Step 1: Fetch invoice details first
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .select(`
@@ -46,12 +46,12 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating payment link for invoice:', invoice.invoice_number);
 
-    // Create payment link using Stripe edge function
-    const paymentLinkResponse = await fetch(`${new URL(req.url).origin}/create-payment-link`, {
+    // Step 2: Create payment link first
+    const paymentLinkResult = await fetch(`${req.headers.get('origin')}/functions/v1/create-payment-link`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...corsHeaders,
+        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
       },
       body: JSON.stringify({
         invoiceId: invoice.id,
@@ -61,22 +61,27 @@ const handler = async (req: Request): Promise<Response> => {
       }),
     });
 
-    if (!paymentLinkResponse.ok) {
-      const errorData = await paymentLinkResponse.json();
+    console.log('Payment link response status:', paymentLinkResult.status);
+
+    if (!paymentLinkResult.ok) {
+      const errorData = await paymentLinkResult.json();
+      console.error('Payment link error:', errorData);
       throw new Error(`Failed to create payment link: ${errorData.error || 'Unknown error'}`);
     }
 
-    const { url: paymentUrl } = await paymentLinkResponse.json();
+    const { url: paymentUrl } = await paymentLinkResult.json();
 
     if (!paymentUrl) {
       throw new Error('Payment URL not received from Stripe');
     }
 
-    // Generate PDF
+    console.log('Payment URL created:', paymentUrl);
+
+    // Step 3: Generate PDF after payment link is created
     const pdfBuffer = await generatePDF(invoice, invoice.business_profiles, invoice.customers);
     const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
 
-    // Generate HTML content with payment link
+    // Step 4: Send email with both PDF and payment link
     const htmlContent = `
       <html>
         <body>
@@ -114,7 +119,7 @@ const handler = async (req: Request): Promise<Response> => {
       ],
     });
 
-    // Log activity
+    // Step 5: Log activity after successful email send
     await supabase
       .from('invoice_activities')
       .insert([{
