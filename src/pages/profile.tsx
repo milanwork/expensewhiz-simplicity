@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -143,7 +142,7 @@ const Profile = () => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"> {/* Updated width */}
       <Button
         variant="ghost"
         className="mb-6"
@@ -153,14 +152,14 @@ const Profile = () => {
         Back to Dashboard
       </Button>
 
-      <div className="bg-white rounded-lg shadow">
+      <div className="bg-white rounded-lg shadow w-full"> {/* Added w-full */}
         <Tabs defaultValue="business" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="personal">Personal Details</TabsTrigger>
             <TabsTrigger value="business">Business Details</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="personal" className="p-6">
+          <TabsContent value="personal" className="p-8"> {/* Increased padding */}
             <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Details</h2>
             <div className="space-y-4">
               <div>
@@ -184,12 +183,12 @@ const Profile = () => {
             </div>
           </TabsContent>
           
-          <TabsContent value="business" className="p-6">
+          <TabsContent value="business" className="p-8"> {/* Increased padding */}
             <div className="space-y-8">
               {/* Business Details Section */}
               <div>
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Business Details</h2>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Added grid layout */}
                   <div>
                     <Label htmlFor="myobSerialNumber">MYOB serial number</Label>
                     <Input
@@ -259,7 +258,7 @@ const Profile = () => {
               {/* Industry Details Section */}
               <div>
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Industry Details</h2>
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Added grid layout */}
                   <div>
                     <Label htmlFor="businessIndustry">Business industry</Label>
                     <Input
@@ -282,8 +281,8 @@ const Profile = () => {
               {/* Contact Details Section */}
               <div>
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Contact Details</h2>
-                <div className="space-y-4">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6"> {/* Added grid layout */}
+                  <div className="md:col-span-2">
                     <Label htmlFor="address">Address</Label>
                     <Textarea
                       id="address"
@@ -333,7 +332,7 @@ const Profile = () => {
               </div>
 
               <Button
-                className="w-full"
+                className="w-full mt-8"
                 onClick={updateProfiles}
               >
                 Save changes
