@@ -5,24 +5,10 @@ import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
+import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/components/ui/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-interface Profile {
-  id: string;
-  first_name: string | null;
-  last_name: string | null;
-  avatar_url: string | null;
-  customer_id: string | null;
-}
 
 interface BusinessProfile {
   id: string;
@@ -40,27 +26,30 @@ interface BusinessProfile {
 const Profile = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(true);
-  const [profile, setProfile] = useState<Profile | null>(null);
   const [businessProfile, setBusinessProfile] = useState<BusinessProfile | null>(null);
+  
+  // Personal Details State
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  
+  // Business Details State
   const [businessName, setBusinessName] = useState("");
-  const [abnAcn, setAbnAcn] = useState("");
-  const [clientId, setClientId] = useState("");
-  const [addressLine1, setAddressLine1] = useState("");
-  const [addressLine2, setAddressLine2] = useState("");
-  const [city, setCity] = useState("");
-  const [state, setState] = useState("VIC");
-  const [country, setCountry] = useState("Australia");
-  const [postcode, setPostcode] = useState("");
-  const [sameAsBusiness, setSameAsBusiness] = useState(true);
-  const [billingAddressLine1, setBillingAddressLine1] = useState("");
-  const [billingAddressLine2, setBillingAddressLine2] = useState("");
-  const [billingCity, setBillingCity] = useState("");
-  const [billingState, setBillingState] = useState("VIC");
-  const [billingCountry, setBillingCountry] = useState("Australia");
-  const [billingPostcode, setBillingPostcode] = useState("");
+  const [tradingName, setTradingName] = useState("");
+  const [abn, setAbn] = useState("");
+  const [gstBranchNumber, setGstBranchNumber] = useState("");
+  const [acn, setAcn] = useState("");
+  const [clientCode, setClientCode] = useState("");
+  
+  // Industry Details State
+  const [businessIndustry, setBusinessIndustry] = useState("Other Services");
+  const [specificIndustry, setSpecificIndustry] = useState("Automotive Body, Paint and Interior Repair");
+  
+  // Contact Details State
+  const [address, setAddress] = useState("");
+  const [website, setWebsite] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [fax, setFax] = useState("");
 
   useEffect(() => {
     getProfiles();
@@ -73,45 +62,38 @@ const Profile = () => {
       if (!user) throw new Error("No user");
 
       // Get personal profile
-      let { data: profileData, error: profileError } = await supabase
+      const { data: profileData } = await supabase
         .from("profiles")
         .select(`*`)
         .eq("id", user.id)
         .single();
-
-      if (profileError) throw profileError;
+      
+      if (profileData) {
+        setFirstName(profileData.first_name || "");
+        setLastName(profileData.last_name || "");
+      }
       
       // Get business profile
-      let { data: businessData, error: businessError } = await supabase
+      const { data: businessData } = await supabase
         .from("business_profiles")
         .select(`*`)
         .eq("user_id", user.id)
         .single();
 
-      if (!businessError) {
+      if (businessData) {
         setBusinessProfile(businessData);
         setBusinessName(businessData.business_name || "");
-        setAbnAcn(businessData.abn_acn || "");
-        setClientId(businessData.client_id || "");
-        setAddressLine1(businessData.address_line1 || "");
-        setAddressLine2(businessData.address_line2 || "");
-        setCity(businessData.city || "");
-        setState(businessData.state || "VIC");
-        setCountry(businessData.country || "Australia");
-        setPostcode(businessData.postcode || "");
+        setAbn(businessData.abn_acn || "");
+        setClientCode(businessData.client_id || "");
+        setAddress(businessData.address_line1 || "");
+        setEmail(user.email || "");
       }
-      
-      setProfile(profileData);
-      setFirstName(profileData.first_name || "");
-      setLastName(profileData.last_name || "");
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: "Error fetching profile",
-        description: "Please try again later.",
+        description: error.message,
         variant: "destructive",
       });
-    } finally {
-      setLoading(false);
     }
   }
 
@@ -122,63 +104,36 @@ const Profile = () => {
       if (!user) throw new Error("No user");
 
       // Update personal profile
-      const profileUpdates = {
-        id: user.id,
-        first_name: firstName,
-        last_name: lastName,
-        updated_at: new Date().toISOString(),
-      };
-
-      let { error: profileError } = await supabase
+      const { error: profileError } = await supabase
         .from("profiles")
-        .upsert(profileUpdates);
+        .update({
+          first_name: firstName,
+          last_name: lastName,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
 
       if (profileError) throw profileError;
 
-      // Check if business profile exists
-      const { data: existingProfile } = await supabase
+      // Update business profile
+      const { error: businessError } = await supabase
         .from("business_profiles")
-        .select("id, client_id")
-        .eq("user_id", user.id)
-        .single();
-
-      const businessUpdates = {
-        id: existingProfile?.id,
-        user_id: user.id,
-        business_name: businessName,
-        abn_acn: abnAcn,
-        client_id: existingProfile?.client_id,
-        address_line1: addressLine1,
-        address_line2: addressLine2,
-        city: city,
-        state: state,
-        country: country,
-        postcode: postcode,
-        updated_at: new Date().toISOString(),
-      };
-
-      let { data: updatedBusiness, error: businessError } = await supabase
-        .from("business_profiles")
-        .upsert(businessUpdates, {
-          onConflict: 'user_id'
+        .update({
+          business_name: businessName,
+          abn_acn: abn,
+          address_line1: address,
+          updated_at: new Date().toISOString(),
         })
-        .select() as { data: BusinessProfile[] | null, error: any };
+        .eq("user_id", user.id);
 
       if (businessError) throw businessError;
-      
-      // Update client ID in UI after successful creation/update
-      if (updatedBusiness && updatedBusiness[0]) {
-        setClientId(updatedBusiness[0].client_id);
-      }
       
       toast({
         title: "Profile updated!",
         description: "Your profile has been successfully updated.",
       });
       
-      navigate("/dashboard");
     } catch (error: any) {
-      console.error("Error updating profiles:", error);
       toast({
         title: "Error updating profile",
         description: error.message,
@@ -188,252 +143,204 @@ const Profile = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      <div className="max-w-4xl mx-auto">
-        <Button
-          variant="ghost"
-          className="mb-6"
-          onClick={() => navigate("/dashboard")}
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to Dashboard
-        </Button>
+    <div className="max-w-4xl mx-auto">
+      <Button
+        variant="ghost"
+        className="mb-6"
+        onClick={() => navigate("/dashboard")}
+      >
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Back to Dashboard
+      </Button>
 
-        <div className="bg-white rounded-lg shadow p-6">
-          <h1 className="text-2xl font-semibold text-gray-900 mb-6">
-            Account details
-          </h1>
-
-          <div className="space-y-8">
-            {/* Business Details Section */}
-            <div>
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Business details
-              </h2>
-              <div className="space-y-4">
-                <div>
-                  <Label htmlFor="businessName">Business name</Label>
-                  <Input
-                    id="businessName"
-                    value={businessName}
-                    onChange={(e) => setBusinessName(e.target.value)}
-                    placeholder="Enter your business name"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="abnAcn">Your business ABN or ACN</Label>
-                  <Input
-                    id="abnAcn"
-                    value={abnAcn}
-                    onChange={(e) => setAbnAcn(e.target.value)}
-                    placeholder="Enter ABN or ACN"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="clientId">Your client ID</Label>
-                  <Input
-                    id="clientId"
-                    value={clientId}
-                    readOnly
-                    className="bg-gray-100"
-                    placeholder="Auto-generated after saving"
-                  />
-                </div>
+      <div className="bg-white rounded-lg shadow">
+        <Tabs defaultValue="business" className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="personal">Personal Details</TabsTrigger>
+            <TabsTrigger value="business">Business Details</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="personal" className="p-6">
+            <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Details</h2>
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="firstName">First Name</Label>
+                <Input
+                  id="firstName"
+                  value={firstName}
+                  onChange={(e) => setFirstName(e.target.value)}
+                  placeholder="Enter your first name"
+                />
+              </div>
+              <div>
+                <Label htmlFor="lastName">Last Name</Label>
+                <Input
+                  id="lastName"
+                  value={lastName}
+                  onChange={(e) => setLastName(e.target.value)}
+                  placeholder="Enter your last name"
+                />
               </div>
             </div>
-
-            {/* Address Details Section */}
-            <div>
-              <h2 className="text-lg font-medium text-gray-900 mb-4">
-                Address details
-              </h2>
-              
-              <div className="space-y-4">
-                <h3 className="text-base font-medium">Business address</h3>
-                
-                <div>
-                  <Label htmlFor="country">Country</Label>
-                  <Select value={country} onValueChange={setCountry}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select country" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Australia">Australia</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div>
-                  <Label htmlFor="addressLine1">Business address</Label>
-                  <Input
-                    id="addressLine1"
-                    value={addressLine1}
-                    onChange={(e) => setAddressLine1(e.target.value)}
-                    placeholder="Enter address line 1"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="addressLine2">Business address line 2</Label>
-                  <Input
-                    id="addressLine2"
-                    value={addressLine2}
-                    onChange={(e) => setAddressLine2(e.target.value)}
-                    placeholder="Enter address line 2"
-                  />
-                </div>
-
-                <div>
-                  <Label htmlFor="city">City / Suburb</Label>
-                  <Input
-                    id="city"
-                    value={city}
-                    onChange={(e) => setCity(e.target.value)}
-                    placeholder="Enter city or suburb"
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
+          </TabsContent>
+          
+          <TabsContent value="business" className="p-6">
+            <div className="space-y-8">
+              {/* Business Details Section */}
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Business Details</h2>
+                <div className="space-y-4">
                   <div>
-                    <Label htmlFor="state">State</Label>
-                    <Select value={state} onValueChange={setState}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select state" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="VIC">VIC</SelectItem>
-                        <SelectItem value="NSW">NSW</SelectItem>
-                        <SelectItem value="QLD">QLD</SelectItem>
-                        <SelectItem value="WA">WA</SelectItem>
-                        <SelectItem value="SA">SA</SelectItem>
-                        <SelectItem value="TAS">TAS</SelectItem>
-                        <SelectItem value="ACT">ACT</SelectItem>
-                        <SelectItem value="NT">NT</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="myobSerialNumber">MYOB serial number</Label>
+                    <Input
+                      id="myobSerialNumber"
+                      value="614405472911"
+                      readOnly
+                      className="bg-gray-50"
+                    />
                   </div>
                   <div>
-                    <Label htmlFor="postcode">Postcode</Label>
+                    <Label htmlFor="businessName">Business name*</Label>
                     <Input
-                      id="postcode"
-                      value={postcode}
-                      onChange={(e) => setPostcode(e.target.value)}
-                      placeholder="Enter postcode"
+                      id="businessName"
+                      value={businessName}
+                      onChange={(e) => setBusinessName(e.target.value)}
+                      placeholder="Enter business name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="tradingName">Trading name</Label>
+                    <Input
+                      id="tradingName"
+                      value={tradingName}
+                      onChange={(e) => setTradingName(e.target.value)}
+                      placeholder="Enter trading name"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="abn">ABN</Label>
+                    <Input
+                      id="abn"
+                      value={abn}
+                      onChange={(e) => setAbn(e.target.value)}
+                      placeholder="Enter ABN"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="gstBranchNumber">GST branch number</Label>
+                    <Input
+                      id="gstBranchNumber"
+                      value={gstBranchNumber}
+                      onChange={(e) => setGstBranchNumber(e.target.value)}
+                      placeholder="Enter GST branch number"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="acn">ACN</Label>
+                    <Input
+                      id="acn"
+                      value={acn}
+                      onChange={(e) => setAcn(e.target.value)}
+                      placeholder="Enter ACN"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="clientCode">Client code</Label>
+                    <Input
+                      id="clientCode"
+                      value={clientCode}
+                      readOnly
+                      className="bg-gray-50"
                     />
                   </div>
                 </div>
-
-                <div className="flex items-center space-x-2 mt-4">
-                  <Checkbox
-                    id="sameAddress"
-                    checked={sameAsBusiness}
-                    onCheckedChange={(checked) => {
-                      setSameAsBusiness(checked as boolean);
-                      if (checked) {
-                        setBillingAddressLine1(addressLine1);
-                        setBillingAddressLine2(addressLine2);
-                        setBillingCity(city);
-                        setBillingState(state);
-                        setBillingCountry(country);
-                        setBillingPostcode(postcode);
-                      }
-                    }}
-                  />
-                  <Label htmlFor="sameAddress" className="text-sm">
-                    My billing address is the same as my business address
-                  </Label>
-                </div>
-
-                {!sameAsBusiness && (
-                  <div className="space-y-4 mt-4">
-                    <h3 className="text-base font-medium">Billing address</h3>
-                    
-                    {/* Billing address fields */}
-                    <div>
-                      <Label htmlFor="billingCountry">Country</Label>
-                      <Select value={billingCountry} onValueChange={setBillingCountry}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select country" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="Australia">Australia</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="billingAddressLine1">Billing address</Label>
-                      <Input
-                        id="billingAddressLine1"
-                        value={billingAddressLine1}
-                        onChange={(e) => setBillingAddressLine1(e.target.value)}
-                        placeholder="Enter billing address"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="billingAddressLine2">Billing address line 2</Label>
-                      <Input
-                        id="billingAddressLine2"
-                        value={billingAddressLine2}
-                        onChange={(e) => setBillingAddressLine2(e.target.value)}
-                        placeholder="Enter billing address line 2"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="billingCity">City / Suburb</Label>
-                      <Input
-                        id="billingCity"
-                        value={billingCity}
-                        onChange={(e) => setBillingCity(e.target.value)}
-                        placeholder="Enter city or suburb"
-                      />
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="billingState">State</Label>
-                        <Select value={billingState} onValueChange={setBillingState}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select state" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="VIC">VIC</SelectItem>
-                            <SelectItem value="NSW">NSW</SelectItem>
-                            <SelectItem value="QLD">QLD</SelectItem>
-                            <SelectItem value="WA">WA</SelectItem>
-                            <SelectItem value="SA">SA</SelectItem>
-                            <SelectItem value="TAS">TAS</SelectItem>
-                            <SelectItem value="ACT">ACT</SelectItem>
-                            <SelectItem value="NT">NT</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="billingPostcode">Postcode</Label>
-                        <Input
-                          id="billingPostcode"
-                          value={billingPostcode}
-                          onChange={(e) => setBillingPostcode(e.target.value)}
-                          placeholder="Enter postcode"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
-            </div>
 
-            <Button
-              className="w-full"
-              onClick={updateProfiles}
-              disabled={loading}
-            >
-              {loading ? "Loading..." : "Save changes"}
-            </Button>
-          </div>
-        </div>
+              {/* Industry Details Section */}
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Industry Details</h2>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="businessIndustry">Business industry</Label>
+                    <Input
+                      id="businessIndustry"
+                      value={businessIndustry}
+                      onChange={(e) => setBusinessIndustry(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="specificIndustry">Specific industry code</Label>
+                    <Input
+                      id="specificIndustry"
+                      value={specificIndustry}
+                      onChange={(e) => setSpecificIndustry(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Contact Details Section */}
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Contact Details</h2>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="address">Address</Label>
+                    <Textarea
+                      id="address"
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      placeholder="Enter address"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="website">Website</Label>
+                    <Input
+                      id="website"
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                      placeholder="Enter website"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      placeholder="Enter email"
+                      type="email"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      placeholder="Enter phone number"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fax">Fax</Label>
+                    <Input
+                      id="fax"
+                      value={fax}
+                      onChange={(e) => setFax(e.target.value)}
+                      placeholder="Enter fax number"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                className="w-full"
+                onClick={updateProfiles}
+              >
+                Save changes
+              </Button>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
