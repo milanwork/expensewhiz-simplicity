@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save, Trash2, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -136,20 +136,17 @@ export default function NewInvoice() {
     initialize();
   }, []);
 
+  const removeItem = (index: number) => {
+    const newItems = [...items];
+    newItems.splice(index, 1);
+    setItems(newItems);
+  };
+
   const handleSubmit = async () => {
     if (!selectedCustomer) {
       toast({
         title: "Error",
         description: "Please select a customer",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (items.length === 0) {
-      toast({
-        title: "Error",
-        description: "Please add at least one line item",
         variant: "destructive",
       });
       return;
@@ -170,7 +167,6 @@ export default function NewInvoice() {
 
       const { subtotal, tax, total } = calculateTotals();
 
-      // Prepare invoice data
       const invoiceData = {
         business_id: businessProfile.id,
         customer_id: selectedCustomer,
@@ -188,33 +184,25 @@ export default function NewInvoice() {
         status: 'draft' as const
       };
 
-      console.log('Saving invoice data:', invoiceData);
-
       let invoiceId: string;
 
       if (existingInvoiceId) {
         // Update existing invoice
-        const { data: updatedInvoice, error: updateError } = await supabase
+        const { error: updateError } = await supabase
           .from('invoices')
           .update(invoiceData)
-          .eq('id', existingInvoiceId)
-          .select()
-          .single();
+          .eq('id', existingInvoiceId);
 
         if (updateError) throw updateError;
-        if (!updatedInvoice) throw new Error("Failed to update invoice");
-        
         invoiceId = existingInvoiceId;
-        console.log('Updated invoice:', updatedInvoice);
 
-        // Delete existing items
+        // Delete all existing items for this invoice
         const { error: deleteError } = await supabase
           .from('invoice_items')
           .delete()
           .eq('invoice_id', existingInvoiceId);
 
         if (deleteError) throw deleteError;
-        console.log('Deleted existing invoice items');
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -225,42 +213,36 @@ export default function NewInvoice() {
 
         if (invoiceError) throw invoiceError;
         if (!newInvoice) throw new Error("Failed to create invoice");
-        
         invoiceId = newInvoice.id;
-        console.log('Created new invoice:', newInvoice);
       }
 
-      // Prepare and insert invoice items
-      const invoiceItems = items.map(item => ({
-        invoice_id: invoiceId,
-        description: item.description,
-        category: item.category,
-        amount: item.amount,
-        job: item.job || null,
-        tax_code: item.tax_code
-      }));
+      // Insert new items without IDs to prevent duplicates
+      if (items.length > 0) {
+        const cleanedItems = items.map(item => ({
+          invoice_id: invoiceId,
+          description: item.description,
+          category: item.category,
+          amount: item.amount,
+          job: item.job || null,
+          tax_code: item.tax_code
+        }));
 
-      console.log('Inserting invoice items:', invoiceItems);
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(cleanedItems);
 
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(invoiceItems);
-
-      if (itemsError) throw itemsError;
+        if (itemsError) throw itemsError;
+      }
 
       // Add activity log entry
-      const activityData = {
-        invoice_id: invoiceId,
-        activity_type: existingInvoiceId ? 'update' : 'create',
-        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
-        performed_by: user.id
-      };
-
-      console.log('Adding activity log:', activityData);
-
       const { error: activityError } = await supabase
         .from('invoice_activities')
-        .insert([activityData]);
+        .insert([{
+          invoice_id: invoiceId,
+          activity_type: existingInvoiceId ? 'update' : 'create',
+          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
+          performed_by: user.id
+        }]);
 
       if (activityError) throw activityError;
 
@@ -268,7 +250,22 @@ export default function NewInvoice() {
         title: "Success",
         description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
       });
-      navigate("/dashboard/invoices");
+
+      // Refresh the data instead of navigating away
+      if (existingInvoiceId) {
+        const { data: refreshedInvoice } = await supabase
+          .from('invoices')
+          .select(`
+            *,
+            items:invoice_items(*)
+          `)
+          .eq('id', existingInvoiceId)
+          .single();
+
+        if (refreshedInvoice) {
+          setItems(refreshedInvoice.items || []);
+        }
+      }
     } catch (error: any) {
       console.error('Error saving invoice:', error);
       toast({
@@ -356,12 +353,23 @@ export default function NewInvoice() {
           </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleSubmit} disabled={isLoading} variant="default">
+          {existingInvoiceId && (
+            <Button 
+              variant="outline"
+              onClick={() => {
+                // TODO: Implement record payment
+                toast({
+                  title: "Coming Soon",
+                  description: "Record payment functionality will be added soon",
+                });
+              }}
+            >
+              Record Payment
+            </Button>
+          )}
+          <Button onClick={handleSubmit} disabled={isLoading}>
             <Save className="mr-2 h-4 w-4" />
             Save
-          </Button>
-          <Button variant="ghost" size="icon">
-            <MoreHorizontal className="h-4 w-4" />
           </Button>
         </div>
       </div>
@@ -385,25 +393,31 @@ export default function NewInvoice() {
                   </SelectContent>
                 </Select>
               </div>
+              <div>
+                <Label>Issue Date *</Label>
+                <Input 
+                  type="date" 
+                  value={issueDate} 
+                  onChange={(e) => setIssueDate(e.target.value)} 
+                />
+              </div>
             </div>
 
             <div className="space-y-4">
-              <div className="grid gap-4">
-                <div>
-                  <Label>Due date *</Label>
-                  <Input 
-                    type="date" 
-                    value={dueDate} 
-                    onChange={(e) => setDueDate(e.target.value)} 
-                  />
-                </div>
-                <div>
-                  <Label>Customer PO number</Label>
-                  <Input 
-                    value={customerPO} 
-                    onChange={(e) => setCustomerPO(e.target.value)} 
-                  />
-                </div>
+              <div>
+                <Label>Due Date *</Label>
+                <Input 
+                  type="date" 
+                  value={dueDate} 
+                  onChange={(e) => setDueDate(e.target.value)} 
+                />
+              </div>
+              <div>
+                <Label>Customer PO Number</Label>
+                <Input 
+                  value={customerPO} 
+                  onChange={(e) => setCustomerPO(e.target.value)} 
+                />
               </div>
             </div>
           </div>
@@ -435,6 +449,7 @@ export default function NewInvoice() {
                   <th className="pb-2">Amount ($) *</th>
                   <th className="pb-2">Job</th>
                   <th className="pb-2">Tax code *</th>
+                  <th className="pb-2"></th>
                 </tr>
               </thead>
               <tbody>
@@ -486,11 +501,23 @@ export default function NewInvoice() {
                         </SelectContent>
                       </Select>
                     </td>
+                    <td className="py-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeItem(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            <Button variant="outline" onClick={addItem}>Add line item</Button>
+            <Button variant="outline" onClick={addItem}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add line item
+            </Button>
           </div>
 
           <div>
