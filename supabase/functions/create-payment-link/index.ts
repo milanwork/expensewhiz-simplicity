@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 
@@ -8,7 +7,7 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-deno-subhost',
 };
 
 interface CreatePaymentLinkRequest {
@@ -23,6 +22,19 @@ interface CreatePaymentLinkRequest {
 const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  const denoSubhost = req.headers.get('x-deno-subhost');
+  if (!denoSubhost || denoSubhost !== 'edge-functions') {
+    return new Response(
+      JSON.stringify({ 
+        error: 'Invalid request: missing or invalid x-deno-subhost header' 
+      }),
+      {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
   }
 
   try {
@@ -116,28 +128,6 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error('Error in create-payment-link function:', error);
     
-    if (error.type?.startsWith('Stripe')) {
-      console.error('Stripe error details:', {
-        type: error.type,
-        code: error.code,
-        param: error.param,
-        message: error.message,
-      });
-      
-      return new Response(
-        JSON.stringify({ 
-          error: error.message,
-          type: error.type,
-          code: error.code,
-          param: error.param,
-        }),
-        {
-          status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
-        }
-      );
-    }
-
     return new Response(
       JSON.stringify({ 
         error: error.message || 'Internal server error',
