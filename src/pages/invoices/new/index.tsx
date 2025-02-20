@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save } from "lucide-react";
@@ -228,11 +229,13 @@ export default function NewInvoice() {
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
 
-        // Delete existing items
-        await supabase
+        // Delete existing items first
+        const { error: deleteError } = await supabase
           .from('invoice_items')
           .delete()
           .eq('invoice_id', existingInvoiceId);
+
+        if (deleteError) throw deleteError;
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -245,24 +248,35 @@ export default function NewInvoice() {
         invoiceId = newInvoice.id;
       }
 
-      // Insert new items
-      const { error: itemsError } = await supabase
-        .from('invoice_items')
-        .insert(
-          items.map(item => ({
-            invoice_id: invoiceId,
-            ...item
-          }))
-        );
+      // Wait for deletion to complete (if updating) before inserting new items
+      if (items.length > 0) {
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(
+            items.map(item => ({
+              id: undefined, // Ensure we don't send an id to avoid conflicts
+              invoice_id: invoiceId,
+              description: item.description,
+              category: item.category,
+              amount: item.amount,
+              job: item.job,
+              tax_code: item.tax_code
+            }))
+          );
 
-      if (itemsError) throw itemsError;
+        if (itemsError) throw itemsError;
+      }
 
       // Add activity
-      await supabase.from('invoice_activities').insert([{
-        invoice_id: invoiceId,
-        activity_type: existingInvoiceId ? 'update' : 'create',
-        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created'
-      }]);
+      const { error: activityError } = await supabase
+        .from('invoice_activities')
+        .insert([{
+          invoice_id: invoiceId,
+          activity_type: existingInvoiceId ? 'update' : 'create',
+          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created'
+        }]);
+
+      if (activityError) throw activityError;
 
       toast({
         title: "Success",
