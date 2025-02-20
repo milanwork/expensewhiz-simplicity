@@ -441,26 +441,27 @@ export default function NewInvoice() {
       const customerDisplayName = selectedCustomerDetails.company_name || 
         `${selectedCustomerDetails.first_name} ${selectedCustomerDetails.surname}`.trim();
 
-      console.log('Creating payment link with customer:', customerDisplayName);
-
-      const requestData = {
+      console.log('Creating payment link with data:', {
         invoiceId: existingInvoiceId,
         amount: totals.total,
         customerEmail: shareEmail,
         description: shareMessage || `Payment for invoice ${invoiceNumber}`,
         invoiceNumber: invoiceNumber,
         customerName: customerDisplayName
-      };
-
-      console.log('Sending request with data:', requestData);
+      });
 
       const response = await supabase.functions.invoke('create-payment-link', {
-        body: JSON.stringify(requestData),
-        headers: {
-          'Content-Type': 'application/json',
-          'x-deno-subhost': 'edge-functions'
+        body: {
+          invoiceId: existingInvoiceId,
+          amount: totals.total,
+          customerEmail: shareEmail,
+          description: shareMessage || `Payment for invoice ${invoiceNumber}`,
+          invoiceNumber: invoiceNumber,
+          customerName: customerDisplayName
         }
       });
+
+      console.log('Edge function response:', response);
 
       if (response.error) {
         throw new Error(response.error.message);
@@ -470,7 +471,6 @@ export default function NewInvoice() {
         throw new Error('No payment URL received');
       }
 
-      // Open payment link in new window
       window.open(response.data.url, '_blank');
 
       toast({
@@ -493,14 +493,6 @@ export default function NewInvoice() {
     }
   };
 
-  const handleCloseShareDialog = () => {
-    setIsShareDialogOpen(false);
-    setShareEmail('');
-    setShareMessage('');
-    setIsSending(false);
-  };
-
-  // Update the Dialog trigger to use our new handleShareClick
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">

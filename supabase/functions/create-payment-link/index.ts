@@ -7,41 +7,31 @@ const corsHeaders = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY') ?? '';
-const stripeBaseUrl = 'https://api.stripe.com/v1';
+interface PaymentLinkRequest {
+  invoiceId: string;
+  amount: number;
+  customerEmail: string;
+  description: string;
+  invoiceNumber: string;
+  customerName: string;
+}
 
 async function makeStripeRequest(endpoint: string, data: Record<string, any>) {
-  const formData = new URLSearchParams();
-  
-  // Flatten the data object into form data
-  function appendFormData(obj: any, prefix = '') {
-    for (const key in obj) {
-      if (obj[key] === undefined || obj[key] === null) continue;
-      
-      const value = obj[key];
-      const keyPath = prefix ? `${prefix}[${key}]` : key;
-
-      if (typeof value === 'object' && !Array.isArray(value)) {
-        appendFormData(value, keyPath);
-      } else if (Array.isArray(value)) {
-        value.forEach((item, index) => {
-          if (typeof item === 'object') {
-            appendFormData(item, `${keyPath}[${index}]`);
-          } else {
-            formData.append(`${keyPath}[${index}]`, item.toString());
-          }
-        });
-      } else {
-        formData.append(keyPath, value.toString());
-      }
-    }
+  const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
+  if (!stripeSecretKey) {
+    throw new Error('Stripe secret key not configured');
   }
 
-  appendFormData(data);
+  const formData = new URLSearchParams();
+  Object.entries(data).forEach(([key, value]) => {
+    if (typeof value === 'object') {
+      formData.append(key, JSON.stringify(value));
+    } else {
+      formData.append(key, String(value));
+    }
+  });
 
-  console.log(`Making Stripe request to ${endpoint}`, data);
-
-  const response = await fetch(`${stripeBaseUrl}${endpoint}`, {
+  const response = await fetch(`https://api.stripe.com/v1${endpoint}`, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${stripeSecretKey}`,
@@ -51,146 +41,133 @@ async function makeStripeRequest(endpoint: string, data: Record<string, any>) {
   });
 
   const responseText = await response.text();
-  console.log(`Stripe ${endpoint} response:`, responseText);
-
-  if (!response.ok) {
-    try {
-      const errorData = JSON.parse(responseText);
-      throw new Error(errorData.error?.message || `Stripe ${endpoint} request failed`);
-    } catch (e) {
-      throw new Error(`Stripe ${endpoint} request failed: ${responseText}`);
-    }
-  }
-
+  
   try {
     return JSON.parse(responseText);
-  } catch (e) {
-    throw new Error(`Invalid JSON response from Stripe ${endpoint}: ${responseText}`);
+  } catch (error) {
+    console.error(`Invalid JSON response from Stripe ${endpoint}:`, responseText);
+    throw new Error(`Invalid response from Stripe: ${responseText}`);
   }
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    console.log('Starting create-payment-link function');
-    
-    // Get the request body as text first
-    const bodyText = await req.text();
-    console.log('Request body:', bodyText);
+    console.log('Received request to create-payment-link');
 
-    // Parse the JSON body
-    let body;
-    try {
-      body = JSON.parse(bodyText);
-    } catch (e) {
-      console.error('Error parsing request body:', e);
+    // Ensure we have a POST request
+    if (req.method !== 'POST') {
       return new Response(
-        JSON.stringify({ error: 'Invalid JSON in request body' }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        JSON.stringify({ error: 'Method not allowed' }),
+        { 
+          status: 405,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
 
-    const { invoiceId, amount, customerEmail, description, invoiceNumber, customerName } = body;
+    // Clone the request to ensure we can read it multiple times if needed
+    const clonedReq = req.clone();
     
-    // Validate required fields
-    if (!invoiceId || !amount || !customerEmail || !invoiceNumber || !customerName) {
-      const missingFields = [];
-      if (!invoiceId) missingFields.push('invoiceId');
-      if (!amount) missingFields.push('amount');
-      if (!customerEmail) missingFields.push('customerEmail');
-      if (!invoiceNumber) missingFields.push('invoiceNumber');
-      if (!customerName) missingFields.push('customerName');
+    // First try to get the raw body
+    const rawBody = await clonedReq.text();
+    console.log('Raw request body:', rawBody);
 
-      console.error('Missing required fields:', missingFields);
+    // Parse the body
+    let requestData: PaymentLinkRequest;
+    try {
+      requestData = JSON.parse(rawBody);
+    } catch (error) {
+      console.error('Failed to parse request body:', error);
+      return new Response(
+        JSON.stringify({ 
+          error: 'Invalid request body',
+          details: error.message
+        }),
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    // Validate all required fields
+    const requiredFields = ['invoiceId', 'amount', 'customerEmail', 'invoiceNumber', 'customerName'];
+    const missingFields = requiredFields.filter(field => !requestData[field as keyof PaymentLinkRequest]);
+    
+    if (missingFields.length > 0) {
       return new Response(
         JSON.stringify({ 
           error: 'Missing required fields',
           missingFields 
         }),
-        {
+        { 
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
         }
       );
     }
 
-    // Create product
+    // Create Stripe product
+    console.log('Creating Stripe product...');
     const product = await makeStripeRequest('/products', {
-      name: `Invoice ${invoiceNumber} for ${customerName}`,
-      description: description || `Payment for invoice ${invoiceNumber}`,
+      name: `Invoice ${requestData.invoiceNumber} for ${requestData.customerName}`,
+      description: requestData.description || `Payment for invoice ${requestData.invoiceNumber}`,
       metadata: {
-        invoiceId,
-        customerEmail,
-        invoiceNumber,
-        customerName,
+        invoiceId: requestData.invoiceId,
+        customerEmail: requestData.customerEmail,
+        invoiceNumber: requestData.invoiceNumber,
       },
     });
 
-    console.log('Product created:', product.id);
-
     // Create price
+    console.log('Creating Stripe price...');
     const price = await makeStripeRequest('/prices', {
       product: product.id,
-      unit_amount: Math.round(amount * 100),
+      unit_amount: Math.round(requestData.amount * 100),
       currency: 'aud',
     });
 
-    console.log('Price created:', price.id);
-
     // Create payment link
+    console.log('Creating payment link...');
     const paymentLink = await makeStripeRequest('/payment_links', {
-      line_items: [
-        {
-          price: price.id,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: price.id, quantity: 1 }],
       metadata: {
-        invoiceId,
-        customerEmail,
-        invoiceNumber,
-        customerName,
+        invoiceId: requestData.invoiceId,
+        customerEmail: requestData.customerEmail,
+        invoiceNumber: requestData.invoiceNumber,
       },
       after_completion: {
         type: 'redirect',
         redirect: {
-          url: `${req.headers.get('origin') || ''}/dashboard/invoices/${invoiceId}?payment=success`,
+          url: `${req.headers.get('origin') || ''}/dashboard/invoices/${requestData.invoiceId}?payment=success`,
         },
       },
-      allow_promotion_codes: false,
       billing_address_collection: 'auto',
     });
 
-    console.log('Payment link created successfully:', paymentLink.url);
+    console.log('Payment link created successfully');
 
     return new Response(
-      JSON.stringify({ 
-        url: paymentLink.url,
-        productId: product.id,
-        priceId: price.id,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      JSON.stringify({ url: paymentLink.url }),
+      { 
         status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   } catch (error) {
-    console.error('Error in create-payment-link function:', error);
+    console.error('Error in create-payment-link:', error);
     return new Response(
       JSON.stringify({ 
-        error: error.message || 'Internal server error',
-        details: error.toString()
+        error: 'Internal server error',
+        message: error.message 
       }),
-      {
+      { 
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
       }
     );
   }
