@@ -402,9 +402,17 @@ export default function NewInvoice() {
       return;
     }
 
+    if (!shareEmail) {
+      toast({
+        title: "Error",
+        description: "Please enter a recipient email",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSending(true);
     try {
-      // Find selected customer details
       const selectedCustomerDetails = customers.find(c => c.id === selectedCustomer);
       if (!selectedCustomerDetails) {
         throw new Error('Selected customer not found');
@@ -415,7 +423,7 @@ export default function NewInvoice() {
 
       console.log('Creating payment link with customer:', customerDisplayName);
 
-      const requestData: ShareInvoiceRequest = {
+      const requestData = {
         invoiceId: existingInvoiceId,
         amount: totals.total,
         customerEmail: shareEmail,
@@ -424,25 +432,35 @@ export default function NewInvoice() {
         customerName: customerDisplayName
       };
 
-      // Log the request data for validation
-      console.log('Sharing invoice with data:', requestData);
+      console.log('Sending request with data:', requestData);
 
-      // Validate all required fields
-      if (!requestData.invoiceNumber || !requestData.customerEmail || !requestData.customerName) {
-        throw new Error('Missing required fields for payment link creation');
-      }
-
-      const response = await supabase.functions.invoke('create-payment-link', {
+      const { data, error } = await supabase.functions.invoke('create-payment-link', {
         body: requestData,
+        headers: {
+          'Content-Type': 'application/json',
+          'x-deno-subhost': 'edge-functions'
+        }
       });
 
-      if (response.error) throw new Error(response.error.message);
+      if (error) {
+        console.error('Supabase function error:', error);
+        throw error;
+      }
+
+      if (!data?.url) {
+        throw new Error('No payment URL received from the server');
+      }
+
+      console.log('Payment link created successfully:', data);
 
       toast({
         title: "Success",
-        description: "Invoice sent successfully",
+        description: "Invoice shared successfully",
       });
+
       setIsShareDialogOpen(false);
+      setShareEmail('');
+      setShareMessage('');
     } catch (error: any) {
       console.error('Error sharing invoice:', error);
       toast({

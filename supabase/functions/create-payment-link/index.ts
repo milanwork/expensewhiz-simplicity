@@ -8,7 +8,8 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-deno-subhost',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
 interface CreatePaymentLinkRequest {
@@ -21,31 +22,35 @@ interface CreatePaymentLinkRequest {
 }
 
 const handler = async (req: Request): Promise<Response> => {
+  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      headers: corsHeaders
+    });
   }
 
   try {
     console.log('Starting create-payment-link function');
     
-    const { invoiceId, amount, customerEmail, description, invoiceNumber, customerName }: CreatePaymentLinkRequest = await req.json();
+    const { invoiceId, amount, customerEmail, description, invoiceNumber, customerName } = await req.json();
     
+    // Validate required fields
     if (!invoiceId || !amount || !customerEmail || !invoiceNumber || !customerName) {
       console.error('Missing required fields:', { invoiceId, amount, customerEmail, invoiceNumber, customerName });
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         {
           status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
 
     console.log('Creating product for customer:', customerName);
 
-    // Create product with customer name in the title
+    // Create product
     const product = await stripe.products.create({
-      name: `Invoice for ${customerName}`,
+      name: `Invoice ${invoiceNumber} for ${customerName}`,
       description: description || `Payment for invoice ${invoiceNumber}`,
       metadata: {
         invoiceId,
@@ -57,9 +62,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Product created:', product.id);
 
+    // Create price
     const price = await stripe.prices.create({
       product: product.id,
-      unit_amount: Math.round(amount * 100),
+      unit_amount: Math.round(amount * 100), // Convert to cents
       currency: 'aud',
       metadata: {
         invoiceId,
@@ -71,6 +77,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Price created:', price.id);
 
+    // Create payment link
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],
       metadata: {
@@ -82,7 +89,7 @@ const handler = async (req: Request): Promise<Response> => {
       after_completion: {
         type: 'redirect',
         redirect: {
-          url: `${new URL(req.url).origin}/dashboard/invoices/${invoiceId}?payment=success`,
+          url: `${req.headers.get('origin') || ''}/dashboard/invoices/${invoiceId}?payment=success`,
         },
       },
       allow_promotion_codes: false,
@@ -95,12 +102,6 @@ const handler = async (req: Request): Promise<Response> => {
     });
 
     console.log('Payment link created successfully:', paymentLink.url);
-
-    await stripe.products.update(product.id, {
-      metadata: {
-        payment_link: paymentLink.url,
-      },
-    });
 
     return new Response(
       JSON.stringify({ 
@@ -116,24 +117,16 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error('Error in create-payment-link function:', error);
     
-    if (error.type?.startsWith('Stripe')) {
-      console.error('Stripe error details:', {
-        type: error.type,
-        code: error.code,
-        param: error.param,
-        message: error.message,
-      });
-      
+    if (error instanceof Stripe.errors.StripeError) {
       return new Response(
         JSON.stringify({ 
           error: error.message,
-          type: error.type,
           code: error.code,
-          param: error.param,
+          type: error.type
         }),
         {
           status: 400,
-          headers: { 'Content-Type': 'application/json', ...corsHeaders },
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );
     }
@@ -145,7 +138,7 @@ const handler = async (req: Request): Promise<Response> => {
       }),
       {
         status: 500,
-        headers: { 'Content-Type': 'application/json', ...corsHeaders },
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
