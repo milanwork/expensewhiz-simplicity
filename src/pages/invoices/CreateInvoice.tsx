@@ -1,7 +1,7 @@
 
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, MoreHorizontal, Save } from "lucide-react";
+import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,9 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
 
 interface Customer {
   id: string;
@@ -32,6 +39,13 @@ interface InvoiceItem {
   tax_code: string;
 }
 
+interface Activity {
+  id: string;
+  activity_type: string;
+  description: string;
+  created_at: string;
+}
+
 export default function CreateInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -39,32 +53,32 @@ export default function CreateInvoice() {
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerPO, setCustomerPO] = useState("");
-  const [issueDate, setIssueDate] = useState(
-    new Date().toISOString().split("T")[0]
-  );
+  const [issueDate] = useState(new Date().toISOString().split("T")[0]);
   const [dueDate, setDueDate] = useState(
     new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
   );
-  const [isTaxInclusive, setIsTaxInclusive] = useState(true);
+  const [isTaxInclusive, setIsTaxInclusive] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", category: "", amount: 0, job: "", tax_code: "" },
+    { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
   ]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [isInitializing, setIsInitializing] = useState(true);
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(true);
+  const [activities, setActivities] = useState<Activity[]>([
+    {
+      id: "1",
+      activity_type: "Created",
+      description: "Invoice created",
+      created_at: new Date().toISOString(),
+    },
+  ]);
 
   useEffect(() => {
     const initialize = async () => {
-      try {
-        await Promise.all([
-          fetchCustomers(),
-          generateInvoiceNumber()
-        ]);
-      } catch (error) {
-        console.error('Initialization error:', error);
-      } finally {
-        setIsInitializing(false);
-      }
+      await Promise.all([
+        fetchCustomers(),
+        generateInvoiceNumber(),
+      ]);
     };
 
     initialize();
@@ -84,9 +98,7 @@ export default function CreateInvoice() {
         .eq('user_id', user.id)
         .single();
 
-      if (!businessProfile) {
-        throw new Error('Business profile not found');
-      }
+      if (!businessProfile) throw new Error('Business profile not found');
 
       const { data: customersList, error } = await supabase
         .from('customers')
@@ -106,25 +118,14 @@ export default function CreateInvoice() {
   };
 
   const generateInvoiceNumber = async () => {
-    try {
-      const timestamp = Date.now();
-      const randomNum = Math.floor(Math.random() * 1000);
-      const newInvoiceNumber = `INV-${timestamp}-${randomNum}`;
-      setInvoiceNumber(newInvoiceNumber);
-    } catch (error) {
-      console.error('Error generating invoice number:', error);
-      toast({
-        title: "Error",
-        description: "Failed to generate invoice number",
-        variant: "destructive",
-      });
-    }
+    const newInvoiceNumber = `INV${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
+    setInvoiceNumber(newInvoiceNumber);
   };
 
   const addItem = () => {
     setItems([
       ...items,
-      { description: "", category: "", amount: 0, job: "", tax_code: "" },
+      { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
     ]);
   };
 
@@ -138,7 +139,13 @@ export default function CreateInvoice() {
     const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
     const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
     const total = isTaxInclusive ? subtotal : (subtotal + tax);
-    return { subtotal: Number(subtotal.toFixed(2)), tax: Number(tax.toFixed(2)), total: Number(total.toFixed(2)) };
+    return { 
+      subtotal: Number(subtotal.toFixed(2)), 
+      tax: Number(tax.toFixed(2)), 
+      total: Number(total.toFixed(2)),
+      amountPaid: 0,
+      balanceDue: Number(total.toFixed(2))
+    };
   };
 
   const handleSubmit = async () => {
@@ -179,6 +186,8 @@ export default function CreateInvoice() {
           subtotal,
           tax,
           total,
+          amount_paid: 0,
+          balance_due: total,
           is_tax_inclusive: isTaxInclusive,
           status: 'draft'
         }])
@@ -223,20 +232,11 @@ export default function CreateInvoice() {
     }
   };
 
-  if (isInitializing) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-center">
-          <div className="text-lg font-medium">Loading...</div>
-          <div className="text-sm text-gray-500">Please wait while we initialize the invoice</div>
-        </div>
-      </div>
-    );
-  }
+  const totals = calculateTotals();
 
   return (
-    <div className="max-w-5xl mx-auto py-6 space-y-8">
-      <div className="flex items-center justify-between">
+    <div className="max-w-5xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
           <Button
             variant="ghost"
@@ -245,10 +245,15 @@ export default function CreateInvoice() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-2xl font-semibold">Create invoice</h1>
+          <div>
+            <h1 className="text-2xl font-semibold">
+              Invoice {invoiceNumber}
+            </h1>
+            <div className="text-sm text-muted-foreground">Draft</div>
+          </div>
         </div>
         <div className="flex items-center space-x-2">
-          <Button onClick={handleSubmit} disabled={isLoading}>
+          <Button onClick={handleSubmit} disabled={isLoading} variant="default">
             <Save className="mr-2 h-4 w-4" />
             Save
           </Button>
@@ -258,48 +263,50 @@ export default function CreateInvoice() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-8">
-        <div className="space-y-4">
-          <div>
-            <Label>Customer *</Label>
-            <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select a customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {customers.map((customer) => (
-                  <SelectItem key={customer.id} value={customer.id}>
-                    {customer.company_name || `${customer.first_name} ${customer.surname}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3 space-y-8">
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div>
+                <Label>Customer *</Label>
+                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.company_name || `${customer.first_name} ${customer.surname}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Invoice number *</Label>
-              <Input value={invoiceNumber} readOnly className="bg-gray-50" />
-            </div>
-            <div>
-              <Label>Customer PO number</Label>
-              <Input value={customerPO} onChange={(e) => setCustomerPO(e.target.value)} />
+            <div className="space-y-4">
+              <div className="grid gap-4">
+                <div>
+                  <Label>Due date *</Label>
+                  <Input 
+                    type="date" 
+                    value={dueDate} 
+                    onChange={(e) => setDueDate(e.target.value)} 
+                  />
+                </div>
+                <div>
+                  <Label>Customer PO number</Label>
+                  <Input 
+                    value={customerPO} 
+                    onChange={(e) => setCustomerPO(e.target.value)} 
+                  />
+                </div>
+              </div>
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>Issue date *</Label>
-              <Input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} />
-            </div>
-            <div>
-              <Label>Due date *</Label>
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-            </div>
-          </div>
+
           <div>
-            <Label>Amounts are</Label>
+            <Label className="mb-2 inline-block">Amounts are</Label>
             <RadioGroup
               value={isTaxInclusive ? "inclusive" : "exclusive"}
               onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
@@ -315,106 +322,153 @@ export default function CreateInvoice() {
               </div>
             </RadioGroup>
           </div>
-        </div>
-      </div>
 
-      <div className="space-y-4">
-        <table className="w-full">
-          <thead>
-            <tr className="text-left">
-              <th className="pb-2">Description</th>
-              <th className="pb-2">Category *</th>
-              <th className="pb-2">Amount ($) *</th>
-              <th className="pb-2">Job</th>
-              <th className="pb-2">Tax code *</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item, index) => (
-              <tr key={index} className="border-t">
-                <td className="py-2">
-                  <Input
-                    value={item.description}
-                    onChange={(e) => updateItem(index, "description", e.target.value)}
-                  />
-                </td>
-                <td className="py-2">
-                  <Select
-                    value={item.category}
-                    onValueChange={(value) => updateItem(index, "category", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="service">Service</SelectItem>
-                      <SelectItem value="product">Product</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </td>
-                <td className="py-2">
-                  <Input
-                    type="number"
-                    value={item.amount}
-                    onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
-                  />
-                </td>
-                <td className="py-2">
-                  <Input
-                    value={item.job}
-                    onChange={(e) => updateItem(index, "job", e.target.value)}
-                  />
-                </td>
-                <td className="py-2">
-                  <Select
-                    value={item.tax_code}
-                    onValueChange={(value) => updateItem(index, "tax_code", value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select tax code" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="GST">GST</SelectItem>
-                      <SelectItem value="NO_GST">No GST</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <Button variant="outline" onClick={addItem}>Add line item</Button>
-      </div>
+          <div className="space-y-4">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left">
+                  <th className="pb-2">Description</th>
+                  <th className="pb-2">Category *</th>
+                  <th className="pb-2">Amount ($) *</th>
+                  <th className="pb-2">Job</th>
+                  <th className="pb-2">Tax code *</th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="py-2">
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.category}
+                        onValueChange={(value) => updateItem(index, "category", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="4-1400 Sales">4-1400 Sales</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        value={item.job}
+                        onChange={(e) => updateItem(index, "job", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.tax_code}
+                        onValueChange={(value) => updateItem(index, "tax_code", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GST">GST</SelectItem>
+                          <SelectItem value="NO_GST">No GST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button variant="outline" onClick={addItem}>Add line item</Button>
+          </div>
 
-      <div className="space-y-4">
-        <div>
-          <Label>Notes to customer</Label>
-          <Input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            className="h-24"
-          />
-        </div>
-      </div>
+          <div>
+            <Label>Notes to customer</Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="h-24"
+            />
+            <div className="flex items-center mt-2">
+              <Checkbox id="saveDefault" />
+              <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
+            </div>
+          </div>
 
-      <div className="flex justify-end space-y-2">
-        <div className="w-64">
-          {items.length > 0 && (
-            <>
+          <div className="flex justify-end">
+            <div className="w-64 space-y-2">
               <div className="flex justify-between py-1">
                 <span>Subtotal</span>
-                <span>${calculateTotals().subtotal.toFixed(2)}</span>
+                <span>${totals.subtotal.toFixed(2)}</span>
               </div>
               <div className="flex justify-between py-1">
                 <span>Tax</span>
-                <span>${calculateTotals().tax.toFixed(2)}</span>
+                <span>${totals.tax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between py-1 font-semibold">
                 <span>Total</span>
-                <span>${calculateTotals().total.toFixed(2)}</span>
+                <span>${totals.total.toFixed(2)}</span>
               </div>
-            </>
-          )}
+              <div className="flex justify-between py-1">
+                <span>Amount paid</span>
+                <span>${totals.amountPaid.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1 font-semibold">
+                <span>Balance due</span>
+                <span>${totals.balanceDue.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <Collapsible
+            open={isActivityLogOpen}
+            onOpenChange={setIsActivityLogOpen}
+            className="bg-white rounded-lg shadow"
+          >
+            <div className="p-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Activity Log</h3>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-9 p-0">
+                  {isActivityLogOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              <div className="px-4 pb-4">
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-4">
+                    {activities.map((activity) => (
+                      <div key={activity.id} className="border-b pb-4">
+                        <div className="text-sm font-medium">
+                          {activity.activity_type}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {activity.description}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {format(new Date(activity.created_at), 'dd/MM/yyyy h:mm a')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
       </div>
     </div>
