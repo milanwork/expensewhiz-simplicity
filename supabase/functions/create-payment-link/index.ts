@@ -49,6 +49,7 @@ const handler = async (req: Request): Promise<Response> => {
       currency: 'aud',
       metadata: {
         invoiceId: invoiceId,
+        customerEmail: customerEmail, // Store email in metadata
       },
     });
 
@@ -57,7 +58,6 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Creating payment link with config:', {
       amount: Math.round(amount * 100),
       description,
-      customerEmail,
     });
 
     const paymentLink = await stripe.paymentLinks.create({
@@ -83,11 +83,11 @@ const handler = async (req: Request): Promise<Response> => {
       payment_intent_data: {
         metadata: {
           invoiceId: invoiceId,
+          customerEmail: customerEmail,
         },
       },
       automatic_tax: { enabled: false },
       invoice_creation: { enabled: true },
-      recipient_email: customerEmail,
     });
 
     console.log('Payment link created successfully:', paymentLink.url);
