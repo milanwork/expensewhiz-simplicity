@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
 import { Resend } from "npm:resend@2.0.0";
@@ -29,12 +28,12 @@ const generatePDF = async (invoice: any, business: any, customer: any) => {
   
   // Header
   doc.setFontSize(20);
-  doc.text(business.business_name || '', 20, 20);
+  doc.text(business.business_name, 20, 20);
   doc.setFontSize(10);
-  doc.text(business.address || '', 20, 30);
-  doc.text(`Phone: ${business.phone || ''}`, 20, 35);
-  doc.text(`Email: ${business.email || ''}`, 20, 40);
-  doc.text(`ABN: ${business.abn || ''}`, 20, 45);
+  doc.text(business.address, 20, 30);
+  doc.text(`Phone: ${business.phone}`, 20, 35);
+  doc.text(`Email: ${business.email}`, 20, 40);
+  doc.text(`ABN: ${business.abn}`, 20, 45);
 
   // Invoice Title
   doc.setFontSize(16);
@@ -43,30 +42,30 @@ const generatePDF = async (invoice: any, business: any, customer: any) => {
   // Invoice Details Table
   doc.setFontSize(10);
   const invoiceDetailsY = 70;
-  doc.text("Purchase order no:", 20, invoiceDetailsY);
-  doc.text("Invoice number:", 80, invoiceDetailsY);
-  doc.text("Issue date:", 140, invoiceDetailsY);
-  doc.text("Due date:", 180, invoiceDetailsY);
+  doc.text("Purchase order no", 20, invoiceDetailsY);
+  doc.text("Invoice number", 80, invoiceDetailsY);
+  doc.text("Issue date", 140, invoiceDetailsY);
+  doc.text("Due date", 180, invoiceDetailsY);
   
-  doc.text(invoice.customer_po_number || '', 20, invoiceDetailsY + 5);
-  doc.text(invoice.invoice_number || '', 80, invoiceDetailsY + 5);
-  doc.text(invoice.issue_date || '', 140, invoiceDetailsY + 5);
-  doc.text(invoice.due_date || '', 180, invoiceDetailsY + 5);
+  doc.text(invoice.customer_po_number, 20, invoiceDetailsY + 5);
+  doc.text(invoice.invoice_number, 80, invoiceDetailsY + 5);
+  doc.text(invoice.issue_date, 140, invoiceDetailsY + 5);
+  doc.text(invoice.due_date, 180, invoiceDetailsY + 5);
 
   // Billing and Shipping Info
   const addressY = 90;
-  doc.text("Bill to:", 20, addressY);
-  doc.text(customer.company_name || '', 20, addressY + 5);
-  doc.text(customer.billing_address || '', 20, addressY + 10);
-  doc.text(`${customer.billing_suburb || ''} ${customer.billing_state || ''} ${customer.billing_postcode || ''}`, 20, addressY + 15);
-  doc.text(customer.billing_country || '', 20, addressY + 20);
+  doc.text("Bill to", 20, addressY);
+  doc.text(customer.company_name, 20, addressY + 5);
+  doc.text(customer.billing_address, 20, addressY + 10);
+  doc.text(`${customer.billing_suburb} ${customer.billing_state} ${customer.billing_postcode}`, 20, addressY + 15);
+  doc.text(customer.billing_country, 20, addressY + 20);
 
   if (customer.shipping_address) {
-    doc.text("Ship to:", 120, addressY);
-    doc.text(customer.company_name || '', 120, addressY + 5);
-    doc.text(customer.shipping_address || '', 120, addressY + 10);
-    doc.text(`${customer.shipping_suburb || ''} ${customer.shipping_state || ''} ${customer.shipping_postcode || ''}`, 120, addressY + 15);
-    doc.text(customer.shipping_country || '', 120, addressY + 20);
+    doc.text("Ship to", 120, addressY);
+    doc.text(customer.company_name, 120, addressY + 5);
+    doc.text(customer.shipping_address, 120, addressY + 10);
+    doc.text(`${customer.shipping_suburb} ${customer.shipping_state} ${customer.shipping_postcode}`, 120, addressY + 15);
+    doc.text(customer.shipping_country, 120, addressY + 20);
   }
 
   // Items Table
@@ -77,9 +76,9 @@ const generatePDF = async (invoice: any, business: any, customer: any) => {
 
   let currentY = itemsStartY + 10;
   invoice.invoice_items.forEach((item: any) => {
-    doc.text(item.description || '', 20, currentY);
-    doc.text(item.tax_code || '', 140, currentY);
-    doc.text(item.amount?.toString() || '0.00', 170, currentY);
+    doc.text(item.description, 20, currentY);
+    doc.text(item.tax_code, 140, currentY);
+    doc.text(item.amount.toFixed(2), 170, currentY);
     currentY += 7;
   });
 
