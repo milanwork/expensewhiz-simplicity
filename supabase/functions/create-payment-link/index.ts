@@ -28,6 +28,15 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating payment link for invoice:', invoiceId);
 
+    // Create a Payment Intent first to attach metadata
+    const paymentIntent = await stripe.paymentIntents.create({
+      amount: Math.round(amount * 100),
+      currency: 'aud',
+      metadata: {
+        invoiceId: invoiceId,
+      },
+    });
+
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [
         {
@@ -37,7 +46,7 @@ const handler = async (req: Request): Promise<Response> => {
               name: `Invoice ${invoiceId}`,
               description: description,
             },
-            unit_amount: Math.round(amount * 100), // Convert to cents
+            unit_amount: Math.round(amount * 100),
           },
           quantity: 1,
         },
@@ -46,6 +55,11 @@ const handler = async (req: Request): Promise<Response> => {
         type: 'redirect',
         redirect: {
           url: `${req.headers.get('origin')}/dashboard/invoices/${invoiceId}?payment=success`,
+        },
+      },
+      payment_intent_data: {
+        metadata: {
+          invoiceId: invoiceId,
         },
       },
       automatic_tax: { enabled: true },
