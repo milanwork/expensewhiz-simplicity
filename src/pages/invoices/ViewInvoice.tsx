@@ -95,46 +95,6 @@ export default function ViewInvoice() {
     }
   }, [id]);
 
-  const fetchCustomers = async () => {
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        navigate('/auth');
-        return;
-      }
-
-      const { data: businessProfile } = await supabase
-        .from('business_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!businessProfile) {
-        toast({
-          title: "Error",
-          description: "Business profile not found",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const { data: customersData, error } = await supabase
-        .from('customers')
-        .select('*')
-        .eq('business_id', businessProfile.id);
-
-      if (error) throw error;
-      setCustomers(customersData || []);
-    } catch (error) {
-      console.error('Error fetching customers:', error);
-      toast({
-        title: "Error",
-        description: "Failed to load customers",
-        variant: "destructive",
-      });
-    }
-  };
-
   const fetchActivities = async () => {
     if (!id) return;
 
