@@ -46,12 +46,13 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating payment link for invoice:', invoice.invoice_number);
 
-    // Step 2: Create payment link first
-    const paymentLinkResult = await fetch(`${req.headers.get('origin')}/functions/v1/create-payment-link`, {
+    // Step 2: Create payment link first using the correct URL structure
+    const baseUrl = new URL(req.url).origin;
+    const paymentLinkResult = await fetch(`${baseUrl}/create-payment-link`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${Deno.env.get('SUPABASE_ANON_KEY')}`,
+        ...corsHeaders,
       },
       body: JSON.stringify({
         invoiceId: invoice.id,
