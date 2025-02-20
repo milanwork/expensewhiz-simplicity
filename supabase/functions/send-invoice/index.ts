@@ -46,32 +46,22 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log('Creating payment link for invoice:', invoice.invoice_number);
 
-    // Step 2: Create payment link first using the correct URL structure
-    const baseUrl = new URL(req.url).origin;
-    const paymentLinkResult = await fetch(`${baseUrl}/create-payment-link`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...corsHeaders,
-      },
-      body: JSON.stringify({
+    // Step 2: Create payment link using Supabase client
+    const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment-link', {
+      body: {
         invoiceId: invoice.id,
         amount: invoice.total,
         customerEmail: recipientEmail,
         description: `Payment for invoice ${invoice.invoice_number}`,
-      }),
+      },
     });
 
-    console.log('Payment link response status:', paymentLinkResult.status);
-
-    if (!paymentLinkResult.ok) {
-      const errorData = await paymentLinkResult.json();
-      console.error('Payment link error:', errorData);
-      throw new Error(`Failed to create payment link: ${errorData.error || 'Unknown error'}`);
+    if (paymentError || !paymentData) {
+      console.error('Payment link error:', paymentError);
+      throw new Error(`Failed to create payment link: ${paymentError?.message || 'Unknown error'}`);
     }
 
-    const { url: paymentUrl } = await paymentLinkResult.json();
-
+    const paymentUrl = paymentData.url;
     if (!paymentUrl) {
       throw new Error('Payment URL not received from Stripe');
     }
