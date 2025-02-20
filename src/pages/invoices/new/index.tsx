@@ -1,3 +1,4 @@
+
 import {
   ArrowLeft,
   Download,
@@ -7,9 +8,8 @@ import {
   Share,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useNavigate, useParams } from "react-router-dom";
 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,18 +20,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Switch } from "@/components/ui/switch";
+import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "@/components/ui/use-toast";
-import { useSupabase } from "@/providers/supabase-provider";
+import { supabase } from "@/integrations/supabase/client";
 import { generateInvoicePdf } from "@/utils/generateInvoicePdf";
 
 export default function NewInvoice() {
-  const router = useRouter();
-  const { supabase } = useSupabase();
+  const navigate = useNavigate();
   const params = useParams();
-  const existingInvoiceId = params.id as string;
+  const existingInvoiceId = params.id;
 
   const [customerPoNumber, setCustomerPoNumber] = useState("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
@@ -154,7 +152,7 @@ export default function NewInvoice() {
           description: "Invoice created successfully",
         });
 
-        router.push(`/invoices/new/${data[0].id}`);
+        navigate(`/invoices/new/${data[0].id}`);
       }
     } catch (error: any) {
       toast({
@@ -309,7 +307,7 @@ export default function NewInvoice() {
 
   return (
     <div className="container relative pb-20">
-      <Button variant="ghost" onClick={() => router.back()}>
+      <Button variant="ghost" onClick={() => navigate(-1)}>
         <ArrowLeft className="mr-2 h-4 w-4" />
         Back
       </Button>
