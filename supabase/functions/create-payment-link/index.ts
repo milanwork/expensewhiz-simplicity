@@ -1,18 +1,18 @@
-
-import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { serve } from 'https://deno.land/std@0.190.0/http/server.ts';
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2023-10-16',
 });
 
+// enable CORS
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, x-deno-subhost',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-interface CreatePaymentLinkRequest {
+interface ShareInvoiceRequest {
   invoiceId: string;
   amount: number;
   customerEmail: string;
@@ -22,31 +22,26 @@ interface CreatePaymentLinkRequest {
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight request
   if (req.method === 'OPTIONS') {
-    return new Response(null, {
-      headers: corsHeaders
-    });
+    return new Response('ok', { headers: corsHeaders });
   }
 
   try {
     console.log('Starting create-payment-link function');
     
     const { invoiceId, amount, customerEmail, description, invoiceNumber, customerName } = await req.json();
-    
-    // Validate required fields
+
     if (!invoiceId || !amount || !customerEmail || !invoiceNumber || !customerName) {
-      console.error('Missing required fields:', { invoiceId, amount, customerEmail, invoiceNumber, customerName });
+      console.error('Missing required parameters');
       return new Response(
-        JSON.stringify({ error: 'Missing required fields' }),
+        JSON.stringify({ error: 'Missing required parameters' }),
         {
-          status: 400,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 400,
         }
       );
     }
-
-    console.log('Creating product for customer:', customerName);
 
     // Create product
     const product = await stripe.products.create({
@@ -60,12 +55,10 @@ const handler = async (req: Request): Promise<Response> => {
       },
     });
 
-    console.log('Product created:', product.id);
-
     // Create price
     const price = await stripe.prices.create({
       product: product.id,
-      unit_amount: Math.round(amount * 100), // Convert to cents
+      unit_amount: Math.round(amount * 100),
       currency: 'aud',
       metadata: {
         invoiceId,
@@ -75,9 +68,7 @@ const handler = async (req: Request): Promise<Response> => {
       },
     });
 
-    console.log('Price created:', price.id);
-
-    // Create payment link
+    // Create payment link with metadata and success URL
     const paymentLink = await stripe.paymentLinks.create({
       line_items: [{ price: price.id, quantity: 1 }],
       metadata: {
@@ -114,31 +105,13 @@ const handler = async (req: Request): Promise<Response> => {
         status: 200,
       }
     );
-  } catch (error: any) {
-    console.error('Error in create-payment-link function:', error);
-    
-    if (error instanceof Stripe.errors.StripeError) {
-      return new Response(
-        JSON.stringify({ 
-          error: error.message,
-          code: error.code,
-          type: error.type
-        }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        }
-      );
-    }
-
+  } catch (error) {
+    console.error('Error creating payment link:', error);
     return new Response(
-      JSON.stringify({ 
-        error: error.message || 'Internal server error',
-        details: error.toString(),
-      }),
+      JSON.stringify({ error: error.message }),
       {
-        status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 500,
       }
     );
   }
