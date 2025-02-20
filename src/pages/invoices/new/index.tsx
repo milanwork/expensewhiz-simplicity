@@ -1,4 +1,3 @@
-
 import {
   ArrowLeft,
   Download,
@@ -45,7 +44,13 @@ export default function NewInvoice() {
   const [recipientEmail, setRecipientEmail] = useState("");
   const [emailMessage, setEmailMessage] = useState("");
 
+  // Add these new state variables
+  const [customerId, setCustomerId] = useState<string | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
   useEffect(() => {
+    // Get the business ID when component mounts
+    getBusinessId();
     if (existingInvoiceId) {
       fetchInvoiceData(existingInvoiceId);
     } else {
@@ -53,16 +58,37 @@ export default function NewInvoice() {
     }
   }, [existingInvoiceId]);
 
+  const getBusinessId = async () => {
+    try {
+      const { data: profile, error } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .single();
+
+      if (error) throw error;
+      if (profile) {
+        setBusinessId(profile.id);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to get business profile",
+        variant: "destructive",
+      });
+    }
+  };
+
   const fetchInvoiceData = async (invoiceId: string) => {
     try {
       const { data: invoice, error } = await supabase
         .from("invoices")
-        .select("*")
+        .select("*, customers (id)")
         .eq("id", invoiceId)
         .single();
 
       if (error) throw error;
 
+      setCustomerId(invoice.customer_id);
       setCustomerPoNumber(invoice.customer_po_number || "");
       setInvoiceNumber(invoice.invoice_number);
       setIssueDate(invoice.issue_date);
@@ -103,10 +129,28 @@ export default function NewInvoice() {
   };
 
   const handleSaveInvoice = async () => {
+    if (!businessId) {
+      toast({
+        title: "Error",
+        description: "No business profile found",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!customerId) {
+      toast({
+        title: "Error",
+        description: "Please select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       if (existingInvoiceId) {
         // Update existing invoice
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from("invoices")
           .update({
             customer_po_number: customerPoNumber,
@@ -130,8 +174,11 @@ export default function NewInvoice() {
         });
       } else {
         // Create new invoice
-        const { data, error } = await supabase.from("invoices").insert([
-          {
+        const { data, error } = await supabase
+          .from("invoices")
+          .insert({
+            business_id: businessId,
+            customer_id: customerId,
             customer_po_number: customerPoNumber,
             invoice_number: invoiceNumber,
             issue_date: issueDate,
@@ -142,17 +189,19 @@ export default function NewInvoice() {
             amount_paid: amountPaid,
             balance_due: balanceDue,
             notes: notes,
-          },
-        ]);
+          })
+          .select()
+          .single();
 
         if (error) throw error;
-
-        toast({
-          title: "Success",
-          description: "Invoice created successfully",
-        });
-
-        navigate(`/invoices/new/${data[0].id}`);
+        
+        if (data) {
+          toast({
+            title: "Success",
+            description: "Invoice created successfully",
+          });
+          navigate(`/invoices/new/${data.id}`);
+        }
       }
     } catch (error: any) {
       toast({
@@ -217,7 +266,7 @@ export default function NewInvoice() {
         .select(`
           *,
           customers (*),
-          business_profiles (*),
+          business_profiles (*)
           invoice_items (*)
         `)
         .eq('id', existingInvoiceId)
@@ -229,10 +278,10 @@ export default function NewInvoice() {
       const pdfData = {
         business: {
           name: invoice.business_profiles.business_name || '',
-          address: invoice.business_profiles.address || '',
-          phone: invoice.business_profiles.phone || '',
-          email: invoice.business_profiles.email || '',
-          abn: invoice.business_profiles.abn || '',
+          address: `${invoice.business_profiles.address_line1 || ''} ${invoice.business_profiles.address_line2 || ''}`,
+          phone: invoice.business_profiles.client_id || '', // Using client_id as phone is not in schema
+          email: invoice.business_profiles.user_id || '', // Using user_id as email is not in schema
+          abn: invoice.business_profiles.abn_acn || '',
         },
         invoice: {
           number: invoice.invoice_number,
