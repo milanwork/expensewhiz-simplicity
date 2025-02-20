@@ -18,7 +18,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
 };
 
-serve(async (req) => {
+const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -34,90 +34,53 @@ serve(async (req) => {
     console.log('Processing webhook event:', event.type);
 
     switch (event.type) {
-      case 'checkout.session.completed':
-      case 'payment_intent.succeeded': {
+      case 'payment_intent.succeeded':
         const paymentIntent = event.data.object;
         const metadata = paymentIntent.metadata;
         const invoiceId = metadata.invoiceId;
 
         if (invoiceId) {
-          console.log('Updating invoice status for invoice:', invoiceId);
-          
-          // Get the current invoice to calculate the new balance
-          const { data: invoice, error: fetchError } = await supabase
-            .from('invoices')
-            .select('total, amount_paid')
-            .eq('id', invoiceId)
-            .single();
-
-          if (fetchError) {
-            console.error('Error fetching invoice:', fetchError);
-            throw fetchError;
-          }
-
-          // Calculate new amount paid and balance
-          const newAmountPaid = (invoice.amount_paid || 0) + (paymentIntent.amount / 100);
-          const newBalance = invoice.total - newAmountPaid;
-          
-          // Determine status based on balance
-          const newStatus = newBalance <= 0 ? 'paid' : 'partial';
-
-          // Update invoice
+          // Update invoice status to paid
           const { error: updateError } = await supabase
             .from('invoices')
             .update({
-              status: newStatus,
-              amount_paid: newAmountPaid,
-              balance_due: newBalance,
+              status: 'paid',
+              amount_paid: paymentIntent.amount / 100, // Convert from cents to dollars
+              balance_due: 0,
               updated_at: new Date().toISOString()
             })
             .eq('id', invoiceId);
 
           if (updateError) {
-            console.error('Error updating invoice:', updateError);
             throw updateError;
           }
 
           // Log the payment activity
-          const { error: activityError } = await supabase
+          await supabase
             .from('invoice_activities')
             .insert([{
               invoice_id: invoiceId,
               activity_type: 'payment_received',
               description: `Payment received: $${(paymentIntent.amount / 100).toFixed(2)}`,
             }]);
-
-          if (activityError) {
-            console.error('Error logging activity:', activityError);
-            throw activityError;
-          }
-
-          console.log('Successfully updated invoice status and logged activity');
         }
         break;
-      }
 
-      case 'payment_intent.payment_failed': {
+      case 'payment_intent.payment_failed':
         const failedPayment = event.data.object;
-        const metadata = failedPayment.metadata;
+        const failedMetadata = failedPayment.metadata;
         
-        if (metadata.invoiceId) {
+        if (failedMetadata.invoiceId) {
           // Log the failed payment attempt
-          const { error: activityError } = await supabase
+          await supabase
             .from('invoice_activities')
             .insert([{
-              invoice_id: metadata.invoiceId,
+              invoice_id: failedMetadata.invoiceId,
               activity_type: 'payment_failed',
               description: `Payment attempt failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`,
             }]);
-
-          if (activityError) {
-            console.error('Error logging failed payment activity:', activityError);
-            throw activityError;
-          }
         }
         break;
-      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -134,4 +97,6 @@ serve(async (req) => {
       }
     );
   }
-});
+};
+
+serve(handler);
