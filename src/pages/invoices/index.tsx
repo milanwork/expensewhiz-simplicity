@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
@@ -189,6 +188,41 @@ export default function Invoices() {
     });
   };
 
+  const handleInvoiceClick = async (invoice: Invoice) => {
+    try {
+      // Fetch complete invoice data including items
+      const { data: invoiceData, error: invoiceError } = await supabase
+        .from('invoices')
+        .select(`
+          *,
+          customer:customers (
+            id,
+            company_name,
+            first_name,
+            surname
+          ),
+          items:invoice_items (*)
+        `)
+        .eq('id', invoice.id)
+        .single();
+
+      if (invoiceError) throw invoiceError;
+
+      // Store the invoice data in localStorage to be accessed by the NewInvoice component
+      localStorage.setItem('editInvoiceData', JSON.stringify(invoiceData));
+      
+      // Navigate to the new invoice page
+      navigate('/dashboard/invoices/new');
+    } catch (error) {
+      console.error('Error fetching invoice details:', error);
+      toast({
+        title: "Error",
+        description: "Failed to load invoice details",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -350,7 +384,7 @@ export default function Invoices() {
                   <tr
                     key={invoice.id}
                     className="border-b hover:bg-gray-50 cursor-pointer transition-colors"
-                    onClick={() => navigate(`/dashboard/invoices/${invoice.id}`)}
+                    onClick={() => handleInvoiceClick(invoice)}
                   >
                     <td className="py-3 px-4 text-sm">
                       {new Date(invoice.issue_date).toLocaleDateString()}

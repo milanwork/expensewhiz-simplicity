@@ -82,10 +82,28 @@ export default function NewInvoice() {
           return;
         }
 
-        await Promise.all([
-          fetchCustomers(user.id),
-          generateInvoiceNumber(),
-        ]);
+        // Check if we have invoice data in localStorage
+        const editInvoiceData = localStorage.getItem('editInvoiceData');
+        if (editInvoiceData) {
+          const invoiceData = JSON.parse(editInvoiceData);
+          // Populate the form with existing invoice data
+          setSelectedCustomer(invoiceData.customer_id);
+          setInvoiceNumber(invoiceData.invoice_number);
+          setCustomerPO(invoiceData.customer_po_number || '');
+          setIssueDate(invoiceData.issue_date);
+          setDueDate(invoiceData.due_date);
+          setIsTaxInclusive(invoiceData.is_tax_inclusive);
+          setItems(invoiceData.items || []);
+          setNotes(invoiceData.notes || '');
+          
+          // Clear the localStorage after using it
+          localStorage.removeItem('editInvoiceData');
+        } else {
+          // If no edit data, generate new invoice number
+          await generateInvoiceNumber();
+        }
+
+        await fetchCustomers(user.id);
       } catch (error) {
         console.error('Initialization error:', error);
         toast({
