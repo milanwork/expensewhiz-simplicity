@@ -114,14 +114,7 @@ export default function NewInvoice() {
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(true);
-  const [activities] = useState<Activity[]>([
-    {
-      id: "1",
-      activity_type: "Created",
-      description: "Invoice created",
-      created_at: new Date().toISOString(),
-    },
-  ]);
+  const [activities, setActivities] = useState<Activity[]>([]);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
@@ -166,10 +159,29 @@ export default function NewInvoice() {
           setIsTaxInclusive(invoiceData.is_tax_inclusive);
           setItems(invoiceData.items || []);
           setNotes(invoiceData.notes || '');
+
+          // Fetch activities for this invoice
+          const { data: activitiesData, error: activitiesError } = await supabase
+            .from('invoice_activities')
+            .select('*')
+            .eq('invoice_id', invoiceData.id)
+            .order('created_at', { ascending: false });
+
+          if (activitiesError) {
+            console.error('Error fetching activities:', activitiesError);
+          } else {
+            setActivities(activitiesData || []);
+          }
           
           localStorage.removeItem('editInvoiceData');
         } else {
           await generateInvoiceNumber();
+          setActivities([{
+            id: "1",
+            activity_type: "Created",
+            description: "Invoice created",
+            created_at: new Date().toISOString(),
+          }]);
         }
 
         await fetchCustomers(user.id);
@@ -230,7 +242,7 @@ export default function NewInvoice() {
         total,
         amount_paid: 0,
         balance_due: total,
-        is_tax_inclusive: isTaxInclusive, // Fixed the column name here
+        is_tax_inclusive: isTaxInclusive,
         status: 'draft' as const
       };
 
@@ -445,9 +457,16 @@ export default function NewInvoice() {
             <h1 className="text-2xl font-semibold">
               Invoice {invoiceNumber}
             </h1>
-            <div className="text-sm text-muted-foreground">Draft</div>
+            {existingInvoiceId && (
+              <div className={`text-sm ${
+                calculateTotals().balanceDue === 0 ? 'text-green-600' : 'text-muted-foreground'
+              }`}>
+                {calculateTotals().balanceDue === 0 ? 'Paid' : 'Draft'}
+              </div>
+            )}
           </div>
         </div>
+        
         <div className="flex items-center space-x-2">
           {existingInvoiceId && (
             <>
