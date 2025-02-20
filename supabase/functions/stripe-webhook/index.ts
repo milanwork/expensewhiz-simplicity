@@ -1,3 +1,4 @@
+
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
@@ -14,21 +15,34 @@ const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature, x-deno-subhost',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': '*',
 };
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 204,
+      headers: corsHeaders
+    });
   }
 
   try {
+    const body = await req.text();
     const signature = req.headers.get('stripe-signature');
+
     if (!signature) {
-      throw new Error('No Stripe signature found');
+      console.error('No stripe signature found in request');
+      return new Response(
+        JSON.stringify({ error: 'No Stripe signature found' }), 
+        { 
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
-    const body = await req.text();
+    console.log('Received webhook request with signature');
     const event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
     console.log('Processing webhook event:', event.type);
 
@@ -75,6 +89,7 @@ serve(async (req) => {
         }
         break;
       }
+
       case 'payment_intent.payment_failed': {
         const failedPayment = event.data.object;
         const metadata = failedPayment.metadata;
@@ -95,19 +110,26 @@ serve(async (req) => {
         }
         break;
       }
+
       default:
         console.log(`Unhandled event type ${event.type}`);
     }
 
-    return new Response(JSON.stringify({ received: true }), {
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-      status: 200,
-    });
+    return new Response(
+      JSON.stringify({ received: true }), 
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   } catch (error) {
     console.error('Webhook error:', error);
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    });
+    return new Response(
+      JSON.stringify({ error: error.message }), 
+      { 
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      }
+    );
   }
 });
