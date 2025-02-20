@@ -18,7 +18,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
 };
 
-const handler = async (req: Request): Promise<Response> => {
+serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -34,53 +34,90 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Processing webhook event:', event.type);
 
     switch (event.type) {
-      case 'payment_intent.succeeded':
+      case 'checkout.session.completed':
+      case 'payment_intent.succeeded': {
         const paymentIntent = event.data.object;
         const metadata = paymentIntent.metadata;
         const invoiceId = metadata.invoiceId;
 
         if (invoiceId) {
-          // Update invoice status to paid
+          console.log('Updating invoice status for invoice:', invoiceId);
+          
+          // Get the current invoice to calculate the new balance
+          const { data: invoice, error: fetchError } = await supabase
+            .from('invoices')
+            .select('total, amount_paid')
+            .eq('id', invoiceId)
+            .single();
+
+          if (fetchError) {
+            console.error('Error fetching invoice:', fetchError);
+            throw fetchError;
+          }
+
+          // Calculate new amount paid and balance
+          const newAmountPaid = (invoice.amount_paid || 0) + (paymentIntent.amount / 100);
+          const newBalance = invoice.total - newAmountPaid;
+          
+          // Determine status based on balance
+          const newStatus = newBalance <= 0 ? 'paid' : 'partial';
+
+          // Update invoice
           const { error: updateError } = await supabase
             .from('invoices')
             .update({
-              status: 'paid',
-              amount_paid: paymentIntent.amount / 100, // Convert from cents to dollars
-              balance_due: 0,
+              status: newStatus,
+              amount_paid: newAmountPaid,
+              balance_due: newBalance,
               updated_at: new Date().toISOString()
             })
             .eq('id', invoiceId);
 
           if (updateError) {
+            console.error('Error updating invoice:', updateError);
             throw updateError;
           }
 
           // Log the payment activity
-          await supabase
+          const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
               invoice_id: invoiceId,
               activity_type: 'payment_received',
               description: `Payment received: $${(paymentIntent.amount / 100).toFixed(2)}`,
             }]);
+
+          if (activityError) {
+            console.error('Error logging activity:', activityError);
+            throw activityError;
+          }
+
+          console.log('Successfully updated invoice status and logged activity');
         }
         break;
+      }
 
-      case 'payment_intent.payment_failed':
+      case 'payment_intent.payment_failed': {
         const failedPayment = event.data.object;
-        const failedMetadata = failedPayment.metadata;
+        const metadata = failedPayment.metadata;
         
-        if (failedMetadata.invoiceId) {
+        if (metadata.invoiceId) {
           // Log the failed payment attempt
-          await supabase
+          const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
-              invoice_id: failedMetadata.invoiceId,
+              invoice_id: metadata.invoiceId,
               activity_type: 'payment_failed',
               description: `Payment attempt failed: ${failedPayment.last_payment_error?.message || 'Unknown error'}`,
             }]);
+
+          if (activityError) {
+            console.error('Error logging failed payment activity:', activityError);
+            throw activityError;
+          }
         }
         break;
+      }
     }
 
     return new Response(JSON.stringify({ received: true }), {
@@ -97,6 +134,4 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
   }
-};
-
-serve(handler);
+});
