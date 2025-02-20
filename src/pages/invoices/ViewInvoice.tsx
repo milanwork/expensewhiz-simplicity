@@ -11,7 +11,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/components/ui/use-toast";
 import { ArrowLeft, Share2, Save, MoreHorizontal, ChevronRight, ChevronDown } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -84,18 +83,31 @@ export default function ViewInvoice() {
   const fetchInvoice = async () => {
     try {
       setIsLoading(true);
-      const { data: invoiceData, error } = await supabase
+      const { data, error } = await supabase
         .from('invoices')
         .select(`
           *,
-          customer:customers(id, company_name, first_name, surname, billing_email),
-          items:invoice_items(*)
+          customer:customers (
+            id,
+            company_name,
+            first_name,
+            surname,
+            billing_email
+          ),
+          items:invoice_items (*)
         `)
         .eq('id', id)
         .single();
 
       if (error) throw error;
-      if (!invoiceData) throw new Error('Invoice not found');
+      if (!data) throw new Error('Invoice not found');
+
+      // Transform the data to match the Invoice type
+      const invoiceData: Invoice = {
+        ...data,
+        customer: data.customer,
+        items: data.items || []
+      };
 
       setInvoice(invoiceData);
     } catch (error) {
