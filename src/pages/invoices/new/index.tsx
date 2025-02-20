@@ -1,20 +1,22 @@
-import { useEffect, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
-import { useForm, Controller } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import * as z from "zod";
-import { useToast } from "@/components/ui/use-toast";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { 
+  ArrowLeft, 
+  ChevronDown, 
+  ChevronRight, 
+  MoreHorizontal, 
+  Save, 
+  Trash2, 
+  Plus, 
+  Mail,
+  Download,
+  Link,
+  Printer,
+  Share
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -23,183 +25,166 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Table,
-  TableBody,
-  TableCaption,
-  TableCell,
-  TableFooter,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Label } from "@/components/ui/label";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/lib/supabase";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { format } from "date-fns";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import {
-  Sheet,
-  SheetClose,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-  SheetTrigger,
-} from "@/components/ui/sheet";
-import { X } from "lucide-react";
-import { Separator } from "@/components/ui/separator";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { useUser, useSupabaseClient } from "@supabase/auth-helpers-react";
-import { useRouter } from "next/router";
-import { Skeleton } from "@/components/ui/skeleton";
-import { Icons } from "@/components/icons";
 
-const invoiceFormSchema = z.object({
-  invoiceNumber: z.string().min(3, {
-    message: "Invoice number must be at least 3 characters.",
-  }),
-  issueDate: z.string(),
-  dueDate: z.string(),
-  notes: z.string().optional(),
-});
+interface Customer {
+  id: string;
+  company_name: string | null;
+  first_name: string | null;
+  surname: string | null;
+}
 
-const lineItemSchema = z.object({
-  id: z.string(),
-  description: z.string().min(3, {
-    message: "Description must be at least 3 characters.",
-  }),
-  quantity: z.coerce.number().min(1, {
-    message: "Quantity must be at least 1.",
-  }),
-  unitPrice: z.coerce.number().min(0, {
-    message: "Unit price must be at least 0.",
-  }),
-});
+interface Activity {
+  id: string;
+  activity_type: string;
+  description: string;
+  created_at: string;
+}
 
-const customerSchema = z.object({
-  id: z.string().optional(),
-  first_name: z.string().min(2, {
-    message: "First name must be at least 2 characters.",
-  }),
-  surname: z.string().min(2, {
-    message: "Surname must be at least 2 characters.",
-  }),
-  company_name: z.string().optional(),
-  email: z.string().email({
-    message: "Please enter a valid email.",
-  }),
-  phone: z.string().optional(),
-  address: z.string().optional(),
-});
+interface InvoiceData {
+  id: string;
+  business_id: string;
+  customer_id: string;
+  invoice_number: string;
+  customer_po_number: string | null;
+  issue_date: string;
+  due_date: string;
+  notes: string | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+  amount_paid: number;
+  balance_due: number;
+  is_tax_inclusive: boolean;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+}
+
+interface InvoiceItem {
+  id?: string;
+  invoice_id?: string;
+  description: string;
+  category: string;
+  amount: number;
+  job: string;
+  tax_code: string;
+}
+
+interface ShareInvoiceRequest {
+  invoiceId: string;
+  amount: number;
+  customerEmail: string;
+  description: string;
+  invoiceNumber: string;
+  customerName: string;  // Added this field
+}
 
 export default function NewInvoice() {
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<string>("");
+  const [invoiceNumber, setInvoiceNumber] = useState("");
+  const [customerPO, setCustomerPO] = useState("");
+  const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState(
+    new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  );
+  const [isTaxInclusive, setIsTaxInclusive] = useState(false);
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+  ]);
+  const [notes, setNotes] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [isActivityLogOpen, setIsActivityLogOpen] = useState(true);
+  const [activities] = useState<Activity[]>([
+    {
+      id: "1",
+      activity_type: "Created",
+      description: "Invoice created",
+      created_at: new Date().toISOString(),
+    },
+  ]);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
-  const [customers, setCustomers] = useState<any[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<string | null>(null);
-  const [isCustomerLoading, setIsCustomerLoading] = useState(false);
-  const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(
-    null
-  );
 
-  const supabase = useSupabaseClient();
-  const user = useUser();
-  const router = useRouter();
-  const { toast } = useToast();
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) {
+          navigate('/auth');
+          return;
+        }
 
-  const customerForm = useForm<z.infer<typeof customerSchema>>({
-    resolver: zodResolver(customerSchema),
-    defaultValues: {
-      first_name: "",
-      surname: "",
-      email: "",
-    },
-  });
+        const editInvoiceData = localStorage.getItem('editInvoiceData');
+        if (editInvoiceData) {
+          const invoiceData = JSON.parse(editInvoiceData);
+          console.log('Loading existing invoice data:', invoiceData);
+          
+          setExistingInvoiceId(invoiceData.id);
+          setSelectedCustomer(invoiceData.customer_id);
+          setInvoiceNumber(invoiceData.invoice_number);
+          setCustomerPO(invoiceData.customer_po_number || '');
+          setIssueDate(invoiceData.issue_date);
+          setDueDate(invoiceData.due_date);
+          setIsTaxInclusive(invoiceData.is_tax_inclusive);
+          setItems(invoiceData.items || []);
+          setNotes(invoiceData.notes || '');
+          
+          localStorage.removeItem('editInvoiceData');
+        } else {
+          await generateInvoiceNumber();
+        }
 
-  const invoiceForm = useForm<z.infer<typeof invoiceFormSchema>>({
-    resolver: zodResolver(invoiceFormSchema),
-    defaultValues: {
-      invoiceNumber: "",
-      issueDate: new Date().toISOString().split("T")[0],
-      dueDate: new Date().toISOString().split("T")[0],
-      notes: "",
-    },
-  });
+        await fetchCustomers(user.id);
+      } catch (error) {
+        console.error('Initialization error:', error);
+        toast({
+          title: "Error",
+          description: "Failed to initialize invoice",
+          variant: "destructive",
+        });
+      }
+    };
 
-  const {
-    register,
-    handleSubmit,
-    watch,
-    control,
-    setValue,
-    getValues,
-    formState: { errors },
-  } = invoiceForm;
+    initialize();
+  }, []);
 
-  const [lineItems, setLineItems] = useState([
-    { id: uuidv4(), description: "", quantity: 1, unitPrice: 0 },
-  ]);
-
-  const totals = {
-    subtotal: lineItems.reduce(
-      (acc, item) => acc + item.quantity * item.unitPrice,
-      0
-    ),
-    tax: 0,
-    discount: 0,
-    total: 0,
+  const removeItem = (index: number) => {
+    const newItems = [...items];
+    newItems.splice(index, 1);
+    setItems(newItems);
   };
 
-  totals.total = totals.subtotal + totals.tax - totals.discount;
-
-  const invoiceNumber = watch("invoiceNumber");
-
-  const addLineItem = () => {
-    setLineItems([...lineItems, { id: uuidv4(), description: "", quantity: 1, unitPrice: 0 }]);
-  };
-
-  const updateLineItem = (id: string, field: string, value: any) => {
-    setLineItems(
-      lineItems.map((item) =>
-        item.id === id ? { ...item, [field]: value } : item
-      )
-    );
-  };
-
-  const deleteLineItem = (id: string) => {
-    setLineItems(lineItems.filter((item) => item.id !== id));
-  };
-
-  const handleOpenShareDialog = () => {
-    setIsShareDialogOpen(true);
-  };
-
-  const handleCloseShareDialog = () => {
-    setIsShareDialogOpen(false);
-    setShareEmail("");
-    setShareMessage("");
-  };
-
-  const onSubmit = async (data: z.infer<typeof invoiceFormSchema>) => {
+  const handleSubmit = async () => {
     if (!selectedCustomer) {
       toast({
         title: "Error",
@@ -209,125 +194,194 @@ export default function NewInvoice() {
       return;
     }
 
+    setIsLoading(true);
     try {
-      const { data: invoiceData, error: invoiceError } = await supabase
-        .from("invoices")
-        .insert([
-          {
-            ...data,
-            customer_id: selectedCustomer,
-            line_items: lineItems,
-            total: totals.total,
-            user_id: user?.id,
-          },
-        ])
-        .select()
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
         .single();
 
-      if (invoiceError) {
-        console.error("Error creating invoice:", invoiceError);
-        toast({
-          title: "Error",
-          description: "Failed to create invoice",
-          variant: "destructive",
-        });
-        return;
+      if (!businessProfile) throw new Error("Business profile not found");
+
+      const { subtotal, tax, total } = calculateTotals();
+
+      const invoiceData = {
+        business_id: businessProfile.id,
+        customer_id: selectedCustomer,
+        invoice_number: invoiceNumber,
+        customer_po_number: customerPO || null,
+        issue_date: issueDate,
+        due_date: dueDate,
+        notes: notes || null,
+        subtotal,
+        tax,
+        total,
+        amount_paid: 0,
+        balance_due: total,
+        is_tax_inclusive: isTaxInclusive, // Fixed the column name here
+        status: 'draft' as const
+      };
+
+      let invoiceId: string;
+
+      if (existingInvoiceId) {
+        // First, update the invoice
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', existingInvoiceId);
+
+        if (updateError) throw updateError;
+        invoiceId = existingInvoiceId;
+
+        // Then, delete ALL existing items
+        console.log('Deleting existing items for invoice:', invoiceId);
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', invoiceId);
+
+        if (deleteError) {
+          console.error('Error deleting items:', deleteError);
+          throw new Error('Failed to delete existing items');
+        }
+      } else {
+        // Create new invoice
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert([invoiceData])
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        if (!newInvoice) throw new Error("Failed to create invoice");
+        invoiceId = newInvoice.id;
       }
 
-      setExistingInvoiceId(invoiceData.id);
+      // Wait a brief moment to ensure deletion is complete
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      // Now insert the current items
+      if (items.length > 0) {
+        const newItems = items.map(item => ({
+          invoice_id: invoiceId,
+          description: item.description || '',
+          category: item.category || '4-1400 Sales',
+          amount: Number(item.amount) || 0,
+          job: item.job || '',
+          tax_code: item.tax_code || 'GST'
+        }));
+
+        console.log('Inserting new items:', newItems);
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(newItems);
+
+        if (itemsError) {
+          console.error('Error inserting items:', itemsError);
+          throw new Error('Failed to insert invoice items');
+        }
+      }
+
+      // Add activity log entry
+      const { error: activityError } = await supabase
+        .from('invoice_activities')
+        .insert([{
+          invoice_id: invoiceId,
+          activity_type: existingInvoiceId ? 'update' : 'create',
+          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
+          performed_by: user.id
+        }]);
+
+      if (activityError) throw activityError;
+
+      // Fetch the latest data after all operations are complete
+      const { data: refreshedData, error: refreshError } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoiceId);
+
+      if (!refreshError && refreshedData) {
+        console.log('Refreshed items:', refreshedData);
+        setItems(refreshedData);
+      }
 
       toast({
         title: "Success",
-        description: "Invoice created successfully",
+        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
       });
 
-      router.push(`/dashboard/invoices/${invoiceData.id}`);
     } catch (error: any) {
-      console.error("Error creating invoice:", error);
+      console.error('Error saving invoice:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create invoice",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const onCustomerSubmit = async (data: z.infer<typeof customerSchema>) => {
-    try {
-      const { data: customerData, error: customerError } = await supabase
-        .from("customers")
-        .insert([
-          {
-            ...data,
-            user_id: user?.id,
-          },
-        ])
-        .select()
-        .single();
-
-      if (customerError) {
-        console.error("Error creating customer:", customerError);
-        toast({
-          title: "Error",
-          description: "Failed to create customer",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      toast({
-        title: "Success",
-        description: "Customer created successfully",
-      });
-
-      customerForm.reset();
-      getCustomers();
-    } catch (error: any) {
-      console.error("Error creating customer:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to create customer",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const getCustomers = async () => {
-    setIsCustomerLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from("customers")
-        .select("*")
-        .eq("user_id", user?.id);
-
-      if (error) {
-        console.error("Error fetching customers:", error);
-        toast({
-          title: "Error",
-          description: "Failed to fetch customers",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      setCustomers(data);
-    } catch (error: any) {
-      console.error("Error fetching customers:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to fetch customers",
+        description: error.message || "Failed to save invoice",
         variant: "destructive",
       });
     } finally {
-      setIsCustomerLoading(false);
+      setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    if (user) {
-      getCustomers();
+  const fetchCustomers = async (userId: string) => {
+    try {
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
+      if (!businessProfile) throw new Error('Business profile not found');
+
+      const { data: customersList, error } = await supabase
+        .from('customers')
+        .select('id, company_name, first_name, surname')
+        .eq('business_id', businessProfile.id);
+
+      if (error) throw error;
+      setCustomers(customersList || []);
+    } catch (error) {
+      console.error('Error fetching customers:', error);
+      throw error;
     }
-  }, [user]);
+  };
+
+  const generateInvoiceNumber = async () => {
+    const newInvoiceNumber = `INV${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
+    setInvoiceNumber(newInvoiceNumber);
+  };
+
+  const addItem = () => {
+    setItems([
+      ...items,
+      { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+    ]);
+  };
+
+  const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    setItems(newItems);
+  };
+
+  const calculateTotals = () => {
+    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
+    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
+    const total = isTaxInclusive ? subtotal : (subtotal + tax);
+    return { 
+      subtotal: Number(subtotal.toFixed(2)), 
+      tax: Number(tax.toFixed(2)), 
+      total: Number(total.toFixed(2)),
+      amountPaid: 0,
+      balanceDue: Number(total.toFixed(2))
+    };
+  };
+
+  const totals = calculateTotals();
 
   const handleShareInvoice = async () => {
     if (!existingInvoiceId) {
@@ -361,7 +415,7 @@ export default function NewInvoice() {
 
       console.log('Creating payment link with customer:', customerDisplayName);
 
-      const requestData = {
+      const requestData: ShareInvoiceRequest = {
         invoiceId: existingInvoiceId,
         amount: totals.total,
         customerEmail: shareEmail,
@@ -380,38 +434,20 @@ export default function NewInvoice() {
 
       const response = await supabase.functions.invoke('create-payment-link', {
         body: requestData,
-        headers: {
-          'Content-Type': 'application/json',
-          'x-deno-subhost': 'edge-functions',
-          // Add any additional required headers
-        }
       });
 
-      if (response.error) {
-        console.error('Error response:', response.error);
-        throw new Error(response.error.message);
-      }
-
-      const { data: paymentData } = response;
-      if (!paymentData?.url) {
-        throw new Error('No payment URL received');
-      }
-
-      console.log('Payment link created:', paymentData.url);
-
-      // Open payment link in new window
-      window.open(paymentData.url, '_blank');
+      if (response.error) throw new Error(response.error.message);
 
       toast({
         title: "Success",
-        description: "Payment link created successfully",
+        description: "Invoice sent successfully",
       });
-      handleCloseShareDialog();
+      setIsShareDialogOpen(false);
     } catch (error: any) {
-      console.error('Error creating payment link:', error);
+      console.error('Error sharing invoice:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to create payment link",
+        description: error.message || "Failed to share invoice",
         variant: "destructive",
       });
     } finally {
@@ -419,352 +455,345 @@ export default function NewInvoice() {
     }
   };
 
+  const handleCloseShareDialog = () => {
+    setIsShareDialogOpen(false);
+    setShareEmail('');
+    setShareMessage('');
+    setIsSending(false);
+  };
+
   return (
-    <>
-      <Form {...invoiceForm}>
-        <form
-          onSubmit={invoiceForm.handleSubmit(onSubmit)}
-          className="space-y-8"
-        >
-          <div className="grid grid-cols-2 gap-4">
-            <FormField
-              control={control}
-              name="invoiceNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Invoice Number</FormLabel>
-                  <FormControl>
-                    <Input placeholder="INV-0001" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+    <div className="max-w-5xl mx-auto p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center space-x-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard/invoices")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-semibold">
+              Invoice {invoiceNumber}
+            </h1>
+            <div className="text-sm text-muted-foreground">Draft</div>
+          </div>
+        </div>
+        <div className="flex items-center space-x-2">
+          {existingInvoiceId && (
+            <>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline">
+                    <Share className="mr-2 h-4 w-4" />
+                    Share
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setIsShareDialogOpen(true)}>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Email invoice
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download PDF
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Printer className="mr-2 h-4 w-4" />
+                    Print
+                  </DropdownMenuItem>
+                  <DropdownMenuItem>
+                    <Link className="mr-2 h-4 w-4" />
+                    Copy link
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  toast({
+                    title: "Coming Soon",
+                    description: "Record payment functionality will be added soon",
+                  });
+                }}
+              >
+                Record Payment
+              </Button>
+            </>
+          )}
+          <Button onClick={handleSubmit} disabled={isLoading}>
+            <Save className="mr-2 h-4 w-4" />
+            Save
+          </Button>
+        </div>
+      </div>
 
-            <FormField
-              control={control}
-              name="issueDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Issue Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <div className="lg:col-span-3 space-y-8">
+          <div className="grid grid-cols-2 gap-8">
+            <div className="space-y-4">
+              <div>
+                <Label>Customer *</Label>
+                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select a customer" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
+                        {customer.company_name || `${customer.first_name} ${customer.surname}`}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Issue Date *</Label>
+                <Input 
+                  type="date" 
+                  value={issueDate} 
+                  onChange={(e) => setIssueDate(e.target.value)} 
+                />
+              </div>
+            </div>
 
-            <FormField
-              control={control}
-              name="dueDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Due Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <div className="space-y-4">
+              <div>
+                <Label>Due Date *</Label>
+                <Input 
+                  type="date" 
+                  value={dueDate} 
+                  onChange={(e) => setDueDate(e.target.value)} 
+                />
+              </div>
+              <div>
+                <Label>Customer PO Number</Label>
+                <Input 
+                  value={customerPO} 
+                  onChange={(e) => setCustomerPO(e.target.value)} 
+                />
+              </div>
+            </div>
           </div>
 
           <div>
-            <FormLabel>Customer</FormLabel>
-            <Select onValueChange={setSelectedCustomer}>
-              <SelectTrigger className="w-[180px]">
-                <SelectValue placeholder="Select a customer" />
-              </SelectTrigger>
-              <SelectContent>
-                {isCustomerLoading ? (
-                  <SelectItem value="loading" disabled>
-                    <Skeleton className="h-4 w-20" />
-                  </SelectItem>
-                ) : (
-                  customers.map((customer) => (
-                    <SelectItem key={customer.id} value={customer.id}>
-                      {customer.company_name
-                        ? customer.company_name
-                        : `${customer.first_name} ${customer.surname}`}
-                    </SelectItem>
-                  ))
-                )}
-                <SelectItem value="new">
-                  <Badge variant="secondary">
-                    New Customer <Icons.add className="ml-2 h-4 w-4" />
-                  </Badge>
-                </SelectItem>
-              </SelectContent>
-            </Select>
+            <Label className="mb-2 inline-block">Amounts are</Label>
+            <RadioGroup
+              value={isTaxInclusive ? "inclusive" : "exclusive"}
+              onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
+              className="flex items-center space-x-4"
+            >
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="inclusive" id="inclusive" />
+                <Label htmlFor="inclusive">Tax inclusive</Label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <RadioGroupItem value="exclusive" id="exclusive" />
+                <Label htmlFor="exclusive">Tax exclusive</Label>
+              </div>
+            </RadioGroup>
           </div>
 
-          {selectedCustomer === "new" ? (
-            <Card>
-              <CardHeader>
-                <CardTitle>New Customer</CardTitle>
-                <CardDescription>
-                  Add a new customer to your list.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...customerForm}>
-                  <form
-                    onSubmit={customerForm.handleSubmit(onCustomerSubmit)}
-                    className="space-y-4"
-                  >
-                    <FormField
-                      control={customerForm.control}
-                      name="first_name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>First Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="John" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={customerForm.control}
-                      name="surname"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Surname</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Doe" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={customerForm.control}
-                      name="company_name"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Company Name</FormLabel>
-                          <FormControl>
-                            <Input placeholder="Acme Corp" {...field} />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <FormField
-                      control={customerForm.control}
-                      name="email"
-                      render={({ field }) => (
-                        <FormItem>
-                          <FormLabel>Email</FormLabel>
-                          <FormControl>
-                            <Input
-                              placeholder="john.doe@example.com"
-                              {...field}
-                            />
-                          </FormControl>
-                          <FormMessage />
-                        </FormItem>
-                      )}
-                    />
-
-                    <Button type="submit">Create Customer</Button>
-                  </form>
-                </Form>
-              </CardContent>
-            </Card>
-          ) : null}
-
-          <Table>
-            <TableCaption>
-              A list of your line items for this invoice.
-            </TableCaption>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-[100px]">Description</TableHead>
-                <TableHead>Quantity</TableHead>
-                <TableHead>Unit Price</TableHead>
-                <TableHead className="text-right">Total</TableHead>
-                <TableHead className="text-right"></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {lineItems.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell className="font-medium">
-                    <Input
-                      type="text"
-                      value={item.description}
-                      onChange={(e) =>
-                        updateLineItem(item.id, "description", e.target.value)
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={item.quantity}
-                      onChange={(e) =>
-                        updateLineItem(item.id, "quantity", parseInt(e.target.value))
-                      }
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Input
-                      type="number"
-                      value={item.unitPrice}
-                      onChange={(e) =>
-                        updateLineItem(item.id, "unitPrice", parseFloat(e.target.value))
-                      }
-                    />
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {(item.quantity * item.unitPrice).toFixed(2)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <X className="h-4 w-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            This action cannot be undone. This will permanently
-                            delete this line item from the invoice.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancel</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => deleteLineItem(item.id)}
-                          >
-                            Delete
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-            <TableFooter>
-              <TableRow>
-                <TableCell colSpan={4}>
-                  <Button onClick={addLineItem}>Add Line Item</Button>
-                </TableCell>
-              </TableRow>
-            </TableFooter>
-          </Table>
-
-          <div className="grid grid-cols-3 gap-4">
-            <div></div>
-            <div></div>
-            <Card>
-              <CardHeader>
-                <CardTitle>Totals</CardTitle>
-                <CardDescription>Invoice totals</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-1">
-                  <div className="flex items-center justify-between">
-                    <Label>Subtotal:</Label>
-                    <span>${totals.subtotal.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label>Tax:</Label>
-                    <span>${totals.tax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <Label>Discount:</Label>
-                    <span>${totals.discount.toFixed(2)}</span>
-                  </div>
-                  <Separator />
-                  <div className="flex items-center justify-between">
-                    <Label>Total:</Label>
-                    <span>${totals.total.toFixed(2)}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+          <div className="space-y-4">
+            <table className="w-full">
+              <thead>
+                <tr className="text-left">
+                  <th className="pb-2">Description</th>
+                  <th className="pb-2">Category *</th>
+                  <th className="pb-2">Amount ($) *</th>
+                  <th className="pb-2">Job</th>
+                  <th className="pb-2">Tax code *</th>
+                  <th className="pb-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {items.map((item, index) => (
+                  <tr key={index} className="border-t">
+                    <td className="py-2">
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.category}
+                        onValueChange={(value) => updateItem(index, "category", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="4-1400 Sales">4-1400 Sales</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
+                        value={item.amount}
+                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        value={item.job}
+                        onChange={(e) => updateItem(index, "job", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Select
+                        value={item.tax_code}
+                        onValueChange={(value) => updateItem(index, "tax_code", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="GST">GST</SelectItem>
+                          <SelectItem value="NO_GST">No GST</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </td>
+                    <td className="py-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeItem(index)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <Button variant="outline" onClick={addItem}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add line item
+            </Button>
           </div>
 
-          <FormField
-            control={control}
-            name="notes"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Notes</FormLabel>
-                <FormControl>
-                  <Textarea
-                    placeholder="Notes about the invoice"
-                    className="resize-none"
-                    {...field}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-
-          <div className="flex justify-between">
-            <Button type="submit">Save Invoice</Button>
-            {existingInvoiceId ? (
-              <Button onClick={handleOpenShareDialog}>Share Invoice</Button>
-            ) : null}
+          <div>
+            <Label>Notes to customer</Label>
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="h-24"
+            />
+            <div className="flex items-center mt-2">
+              <Checkbox id="saveDefault" />
+              <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
+            </div>
           </div>
-        </form>
-      </Form>
 
-      <Sheet open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
-        <SheetContent>
-          <SheetHeader>
-            <SheetTitle>Share Invoice</SheetTitle>
-            <SheetDescription>
-              Enter the email address of the person you want to share this
-              invoice with.
-            </SheetDescription>
-          </SheetHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="email" className="text-right">
-                Email
-              </Label>
+          <div className="flex justify-end">
+            <div className="w-64 space-y-2">
+              <div className="flex justify-between py-1">
+                <span>Subtotal</span>
+                <span>${totals.subtotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span>Tax</span>
+                <span>${totals.tax.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1 font-semibold">
+                <span>Total</span>
+                <span>${totals.total.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span>Amount paid</span>
+                <span>${totals.amountPaid.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between py-1 font-semibold">
+                <span>Balance due</span>
+                <span>${totals.balanceDue.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="lg:col-span-1">
+          <Collapsible
+            open={isActivityLogOpen}
+            onOpenChange={setIsActivityLogOpen}
+            className="bg-white rounded-lg shadow"
+          >
+            <div className="p-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Activity Log</h3>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-9 p-0">
+                  {isActivityLogOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+            <CollapsibleContent>
+              <div className="px-4 pb-4">
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-4">
+                    {activities.map((activity) => (
+                      <div key={activity.id} className="border-b pb-4">
+                        <div className="text-sm font-medium">
+                          {activity.activity_type}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {activity.description}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {format(new Date(activity.created_at), 'dd/MM/yyyy h:mm a')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
+        </div>
+      </div>
+
+      <Dialog open={isShareDialogOpen} onOpenChange={handleCloseShareDialog}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Share Invoice</DialogTitle>
+            <DialogDescription>
+              Send this invoice via email
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Recipient Email</Label>
               <Input
-                id="email"
+                type="email"
+                placeholder="Enter email address"
                 value={shareEmail}
                 onChange={(e) => setShareEmail(e.target.value)}
-                className="col-span-3"
               />
             </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="message" className="text-right">
-                Message
-              </Label>
+            <div className="space-y-2">
+              <Label>Message (optional)</Label>
               <Textarea
-                id="message"
+                placeholder="Add a message to your invoice"
                 value={shareMessage}
                 onChange={(e) => setShareMessage(e.target.value)}
-                className="col-span-3"
               />
             </div>
           </div>
-          <SheetFooter>
-            <Button type="button" onClick={handleShareInvoice} disabled={isSending}>
-              {isSending && (
-                <Icons.spinner className="mr-2 h-4 w-4 animate-spin" />
-              )}
-              Send Payment Link
+          <DialogFooter>
+            <Button variant="outline" onClick={handleCloseShareDialog}>
+              Cancel
             </Button>
-          </SheetFooter>
-        </SheetContent>
-      </Sheet>
-    </>
+            <Button onClick={handleShareInvoice} disabled={isSending}>
+              {isSending ? "Sending..." : "Send Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }
