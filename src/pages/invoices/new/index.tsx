@@ -180,7 +180,7 @@ export default function NewInvoice() {
         total,
         amount_paid: 0,
         balance_due: total,
-        is_tax_intensive: isTaxInclusive,
+        is_tax_inclusive: isTaxInclusive, // Fixed the column name here
         status: 'draft' as const
       };
 
