@@ -1,10 +1,11 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Plus, CreditCard, MoreHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabase";
-import { useToast } from "@/components/ui/use-toast";
+import { useToast } from "@/hooks/use-toast";
 import {
   Select,
   SelectContent,
@@ -190,26 +191,46 @@ export default function Invoices() {
 
   const handleInvoiceClick = async (invoice: Invoice) => {
     try {
-      // Fetch complete invoice data including items
+      // First fetch the invoice details
       const { data: invoiceData, error: invoiceError } = await supabase
         .from('invoices')
         .select(`
-          *,
-          customer:customers (
-            id,
-            company_name,
-            first_name,
-            surname
-          ),
-          items:invoice_items (*)
+          id,
+          invoice_number,
+          customer_id,
+          customer_po_number,
+          issue_date,
+          due_date,
+          is_tax_inclusive,
+          notes,
+          subtotal,
+          tax,
+          total,
+          balance_due,
+          amount_paid,
+          status
         `)
         .eq('id', invoice.id)
         .single();
 
       if (invoiceError) throw invoiceError;
 
-      // Store the invoice data in localStorage to be accessed by the NewInvoice component
-      localStorage.setItem('editInvoiceData', JSON.stringify(invoiceData));
+      // Then fetch the invoice items separately
+      const { data: itemsData, error: itemsError } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoice.id);
+
+      if (itemsError) throw itemsError;
+
+      // Combine the data
+      const fullInvoiceData = {
+        ...invoiceData,
+        items: itemsData
+      };
+
+      // Store the complete data in localStorage
+      localStorage.setItem('editInvoiceData', JSON.stringify(fullInvoiceData));
       
       // Navigate to the new invoice page
       navigate('/dashboard/invoices/new');
