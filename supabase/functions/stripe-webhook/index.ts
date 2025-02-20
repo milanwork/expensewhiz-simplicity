@@ -16,27 +16,49 @@ const endpointSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET') ?? '';
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature, x-deno-subhost',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Max-Age': '86400',
 };
 
 serve(async (req) => {
   // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders });
+    return new Response(null, {
+      status: 200,
+      headers: corsHeaders
+    });
   }
 
   try {
-    // Verify the x-deno-subhost header
-    const denoSubhost = req.headers.get('x-deno-subhost');
-    if (!denoSubhost) {
-      throw new Error('No x-deno-subhost header found');
-    }
-
-    const signature = req.headers.get('stripe-signature');
-    if (!signature) {
-      throw new Error('No Stripe signature found');
+    // Check if we have an authorization header
+    const authHeader = req.headers.get('authorization');
+    if (!authHeader) {
+      console.error('Missing authorization header');
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
     }
 
     const body = await req.text();
+    const signature = req.headers.get('stripe-signature');
+    
+    if (!signature) {
+      console.error('Missing Stripe signature');
+      return new Response(
+        JSON.stringify({ error: 'Missing Stripe signature' }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        }
+      );
+    }
+
+    console.log('Received webhook with signature:', signature);
+    
     const event = stripe.webhooks.constructEvent(body, signature, endpointSecret);
     console.log('Processing webhook event:', event.type);
 
@@ -45,12 +67,11 @@ serve(async (req) => {
         const session = event.data.object;
         const metadata = session.metadata;
         const invoiceId = metadata?.invoiceId;
-        const amountPaid = session.amount_total / 100; // Convert from cents to dollars
+        const amountPaid = session.amount_total / 100;
 
         if (invoiceId) {
           console.log(`Updating invoice ${invoiceId} to paid status`);
           
-          // Update invoice status to paid
           const { error: updateError } = await supabase
             .from('invoices')
             .update({
@@ -66,7 +87,6 @@ serve(async (req) => {
             throw updateError;
           }
 
-          // Log the payment activity
           const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
@@ -89,12 +109,11 @@ serve(async (req) => {
         const paymentIntent = event.data.object;
         const metadata = paymentIntent.metadata;
         const invoiceId = metadata?.invoiceId;
-        const amountPaid = paymentIntent.amount / 100; // Convert from cents to dollars
+        const amountPaid = paymentIntent.amount / 100;
 
         if (invoiceId) {
           console.log(`Updating invoice ${invoiceId} to paid status`);
           
-          // Update invoice status to paid
           const { error: updateError } = await supabase
             .from('invoices')
             .update({
@@ -110,7 +129,6 @@ serve(async (req) => {
             throw updateError;
           }
 
-          // Log the payment activity
           const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
@@ -134,7 +152,6 @@ serve(async (req) => {
         const metadata = failedPayment.metadata;
         
         if (metadata?.invoiceId) {
-          // Log the failed payment attempt
           const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
