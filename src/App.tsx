@@ -21,11 +21,9 @@ function App() {
           <Route path="contacts" element={<Contacts />} />
           <Route path="contacts/new" element={<ContactForm />} />
           <Route path="contacts/:id" element={<ContactForm />} />
-          <Route path="invoices">
-            <Route index element={<Invoices />} />
-            <Route path="new" element={<NewInvoice />} />
-            <Route path=":id" element={<ViewInvoice />} />
-          </Route>
+          <Route path="invoices" element={<Invoices />} />
+          <Route path="invoices/new" element={<NewInvoice />} />
+          <Route path="invoices/:id" element={<ViewInvoice />} />
           <Route path="profile" element={<Profile />} />
         </Route>
       </Routes>
