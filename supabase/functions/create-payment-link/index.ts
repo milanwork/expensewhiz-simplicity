@@ -16,6 +16,7 @@ interface CreatePaymentLinkRequest {
   amount: number;
   customerEmail: string;
   description: string;
+  invoiceNumber: string;  // Added this field
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -28,10 +29,10 @@ const handler = async (req: Request): Promise<Response> => {
     console.log('Starting create-payment-link function');
     
     // Validate request
-    const { invoiceId, amount, customerEmail, description }: CreatePaymentLinkRequest = await req.json();
+    const { invoiceId, amount, customerEmail, description, invoiceNumber }: CreatePaymentLinkRequest = await req.json();
     
-    if (!invoiceId || !amount || !customerEmail) {
-      console.error('Missing required fields:', { invoiceId, amount, customerEmail });
+    if (!invoiceId || !amount || !customerEmail || !invoiceNumber) {
+      console.error('Missing required fields:', { invoiceId, amount, customerEmail, invoiceNumber });
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         {
@@ -41,15 +42,16 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log('Creating product for invoice');
+    console.log('Creating product for invoice:', invoiceNumber);
 
-    // First, create a product
+    // First, create a product with proper invoice number
     const product = await stripe.products.create({
-      name: `Invoice ${invoiceId}`,
-      description: description,
+      name: `Invoice ${invoiceNumber}`,
+      description: description || `Payment for invoice ${invoiceNumber}`,
       metadata: {
         invoiceId: invoiceId,
         customerEmail: customerEmail,
+        invoiceNumber: invoiceNumber,
       },
     });
 
@@ -63,6 +65,7 @@ const handler = async (req: Request): Promise<Response> => {
       metadata: {
         invoiceId: invoiceId,
         customerEmail: customerEmail,
+        invoiceNumber: invoiceNumber,
       },
     });
 
@@ -79,6 +82,7 @@ const handler = async (req: Request): Promise<Response> => {
       metadata: {
         invoiceId: invoiceId,
         customerEmail: customerEmail,
+        invoiceNumber: invoiceNumber,
       },
       after_completion: {
         type: 'redirect',
@@ -90,7 +94,7 @@ const handler = async (req: Request): Promise<Response> => {
       billing_address_collection: 'auto',
       custom_text: {
         submit: {
-          message: `Thank you for your payment for Invoice ${invoiceId}`,
+          message: `Thank you for your payment for Invoice ${invoiceNumber}`,
         },
       },
     });
