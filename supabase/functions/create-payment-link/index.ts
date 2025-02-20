@@ -16,10 +16,11 @@ interface CreatePaymentLinkRequest {
   amount: number;
   customerEmail: string;
   description: string;
+  invoiceNumber: string;
+  customerName: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
-  // Handle CORS preflight requests
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -27,11 +28,10 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     console.log('Starting create-payment-link function');
     
-    // Validate request
-    const { invoiceId, amount, customerEmail, description }: CreatePaymentLinkRequest = await req.json();
+    const { invoiceId, amount, customerEmail, description, invoiceNumber, customerName }: CreatePaymentLinkRequest = await req.json();
     
-    if (!invoiceId || !amount || !customerEmail) {
-      console.error('Missing required fields:', { invoiceId, amount, customerEmail });
+    if (!invoiceId || !amount || !customerEmail || !invoiceNumber || !customerName) {
+      console.error('Missing required fields:', { invoiceId, amount, customerEmail, invoiceNumber, customerName });
       return new Response(
         JSON.stringify({ error: 'Missing required fields' }),
         {
@@ -41,44 +41,43 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log('Creating product for invoice');
+    console.log('Creating product for customer:', customerName);
 
-    // First, create a product
+    // Create product with customer name in the title
     const product = await stripe.products.create({
-      name: `Invoice ${invoiceId}`,
-      description: description,
+      name: `Invoice for ${customerName}`,
+      description: description || `Payment for invoice ${invoiceNumber}`,
       metadata: {
-        invoiceId: invoiceId,
-        customerEmail: customerEmail,
+        invoiceId,
+        customerEmail,
+        invoiceNumber,
+        customerName,
       },
     });
 
     console.log('Product created:', product.id);
 
-    // Then, create a price for the product
     const price = await stripe.prices.create({
       product: product.id,
-      unit_amount: Math.round(amount * 100), // Convert to cents
+      unit_amount: Math.round(amount * 100),
       currency: 'aud',
       metadata: {
-        invoiceId: invoiceId,
-        customerEmail: customerEmail,
+        invoiceId,
+        customerEmail,
+        invoiceNumber,
+        customerName,
       },
     });
 
     console.log('Price created:', price.id);
 
-    // Create the payment link using the price ID
     const paymentLink = await stripe.paymentLinks.create({
-      line_items: [
-        {
-          price: price.id,
-          quantity: 1,
-        },
-      ],
+      line_items: [{ price: price.id, quantity: 1 }],
       metadata: {
-        invoiceId: invoiceId,
-        customerEmail: customerEmail,
+        invoiceId,
+        customerEmail,
+        invoiceNumber,
+        customerName,
       },
       after_completion: {
         type: 'redirect',
@@ -90,14 +89,13 @@ const handler = async (req: Request): Promise<Response> => {
       billing_address_collection: 'auto',
       custom_text: {
         submit: {
-          message: `Thank you for your payment for Invoice ${invoiceId}`,
+          message: `Thank you for your payment, ${customerName}`,
         },
       },
     });
 
     console.log('Payment link created successfully:', paymentLink.url);
 
-    // Store the payment link details in metadata
     await stripe.products.update(product.id, {
       metadata: {
         payment_link: paymentLink.url,
@@ -118,8 +116,7 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error: any) {
     console.error('Error in create-payment-link function:', error);
     
-    // Handle Stripe errors specifically
-    if (error.type && error.type.startsWith('Stripe')) {
+    if (error.type?.startsWith('Stripe')) {
       console.error('Stripe error details:', {
         type: error.type,
         code: error.code,
@@ -141,7 +138,6 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    // Handle other errors
     return new Response(
       JSON.stringify({ 
         error: error.message || 'Internal server error',

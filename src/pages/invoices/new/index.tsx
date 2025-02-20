@@ -94,6 +94,15 @@ interface InvoiceItem {
   tax_code: string;
 }
 
+interface ShareInvoiceRequest {
+  invoiceId: string;
+  amount: number;
+  customerEmail: string;
+  description: string;
+  invoiceNumber: string;
+  customerName: string;  // Added this field
+}
+
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -384,14 +393,47 @@ export default function NewInvoice() {
       return;
     }
 
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Please select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsSending(true);
     try {
-      const response = await supabase.functions.invoke('send-invoice', {
-        body: {
-          invoiceId: existingInvoiceId,
-          recipientEmail: shareEmail,
-          message: shareMessage,
-        },
+      // Find selected customer details
+      const selectedCustomerDetails = customers.find(c => c.id === selectedCustomer);
+      if (!selectedCustomerDetails) {
+        throw new Error('Selected customer not found');
+      }
+
+      const customerDisplayName = selectedCustomerDetails.company_name || 
+        `${selectedCustomerDetails.first_name} ${selectedCustomerDetails.surname}`.trim();
+
+      console.log('Creating payment link with customer:', customerDisplayName);
+
+      const requestData: ShareInvoiceRequest = {
+        invoiceId: existingInvoiceId,
+        amount: totals.total,
+        customerEmail: shareEmail,
+        description: shareMessage || `Payment for invoice ${invoiceNumber}`,
+        invoiceNumber: invoiceNumber,
+        customerName: customerDisplayName
+      };
+
+      // Log the request data for validation
+      console.log('Sharing invoice with data:', requestData);
+
+      // Validate all required fields
+      if (!requestData.invoiceNumber || !requestData.customerEmail || !requestData.customerName) {
+        throw new Error('Missing required fields for payment link creation');
+      }
+
+      const response = await supabase.functions.invoke('create-payment-link', {
+        body: requestData,
       });
 
       if (response.error) throw new Error(response.error.message);
