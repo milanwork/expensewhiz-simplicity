@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save } from "lucide-react";
@@ -31,19 +30,39 @@ interface Customer {
   surname: string | null;
 }
 
-interface InvoiceItem {
-  description: string;
-  category: string;
-  amount: number;
-  job: string;
-  tax_code: string;
-}
-
 interface Activity {
   id: string;
   activity_type: string;
   description: string;
   created_at: string;
+}
+
+interface InvoiceData {
+  id: string;
+  business_id: string;
+  customer_id: string;
+  invoice_number: string;
+  customer_po_number: string | null;
+  issue_date: string;
+  due_date: string;
+  notes: string | null;
+  subtotal: number;
+  tax: number;
+  total: number;
+  amount_paid: number;
+  balance_due: number;
+  is_tax_inclusive: boolean;
+  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
+}
+
+interface InvoiceItem {
+  id?: string;
+  invoice_id?: string;
+  description: string;
+  category: string;
+  amount: number;
+  job: string;
+  tax_code: string;
 }
 
 export default function NewInvoice() {
@@ -83,11 +102,11 @@ export default function NewInvoice() {
           return;
         }
 
-        // Check if we have invoice data in localStorage
         const editInvoiceData = localStorage.getItem('editInvoiceData');
         if (editInvoiceData) {
           const invoiceData = JSON.parse(editInvoiceData);
-          // Populate the form with existing invoice data
+          console.log('Loading existing invoice data:', invoiceData);
+          
           setExistingInvoiceId(invoiceData.id);
           setSelectedCustomer(invoiceData.customer_id);
           setInvoiceNumber(invoiceData.invoice_number);
@@ -98,10 +117,8 @@ export default function NewInvoice() {
           setItems(invoiceData.items || []);
           setNotes(invoiceData.notes || '');
           
-          // Clear the localStorage after using it
           localStorage.removeItem('editInvoiceData');
         } else {
-          // If no edit data, generate new invoice number
           await generateInvoiceNumber();
         }
 
@@ -118,6 +135,151 @@ export default function NewInvoice() {
 
     initialize();
   }, []);
+
+  const handleSubmit = async () => {
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Please select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (items.length === 0) {
+      toast({
+        title: "Error",
+        description: "Please add at least one line item",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Not authenticated");
+
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
+      if (!businessProfile) throw new Error("Business profile not found");
+
+      const { subtotal, tax, total } = calculateTotals();
+
+      // Prepare invoice data
+      const invoiceData = {
+        business_id: businessProfile.id,
+        customer_id: selectedCustomer,
+        invoice_number: invoiceNumber,
+        customer_po_number: customerPO || null,
+        issue_date: issueDate,
+        due_date: dueDate,
+        notes: notes || null,
+        subtotal,
+        tax,
+        total,
+        amount_paid: 0,
+        balance_due: total,
+        is_tax_inclusive: isTaxInclusive,
+        status: 'draft' as const
+      };
+
+      console.log('Saving invoice data:', invoiceData);
+
+      let invoiceId: string;
+
+      if (existingInvoiceId) {
+        // Update existing invoice
+        const { data: updatedInvoice, error: updateError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', existingInvoiceId)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+        if (!updatedInvoice) throw new Error("Failed to update invoice");
+        
+        invoiceId = existingInvoiceId;
+        console.log('Updated invoice:', updatedInvoice);
+
+        // Delete existing items
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', existingInvoiceId);
+
+        if (deleteError) throw deleteError;
+        console.log('Deleted existing invoice items');
+      } else {
+        // Create new invoice
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert([invoiceData])
+          .select()
+          .single();
+
+        if (invoiceError) throw invoiceError;
+        if (!newInvoice) throw new Error("Failed to create invoice");
+        
+        invoiceId = newInvoice.id;
+        console.log('Created new invoice:', newInvoice);
+      }
+
+      // Prepare and insert invoice items
+      const invoiceItems = items.map(item => ({
+        invoice_id: invoiceId,
+        description: item.description,
+        category: item.category,
+        amount: item.amount,
+        job: item.job || null,
+        tax_code: item.tax_code
+      }));
+
+      console.log('Inserting invoice items:', invoiceItems);
+
+      const { error: itemsError } = await supabase
+        .from('invoice_items')
+        .insert(invoiceItems);
+
+      if (itemsError) throw itemsError;
+
+      // Add activity log entry
+      const activityData = {
+        invoice_id: invoiceId,
+        activity_type: existingInvoiceId ? 'update' : 'create',
+        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
+        performed_by: user.id
+      };
+
+      console.log('Adding activity log:', activityData);
+
+      const { error: activityError } = await supabase
+        .from('invoice_activities')
+        .insert([activityData]);
+
+      if (activityError) throw activityError;
+
+      toast({
+        title: "Success",
+        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
+      });
+      navigate("/dashboard/invoices");
+    } catch (error: any) {
+      console.error('Error saving invoice:', error);
+      toast({
+        title: "Error",
+        description: error.message || "Failed to save invoice",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const fetchCustomers = async (userId: string) => {
     try {
@@ -171,128 +333,6 @@ export default function NewInvoice() {
       amountPaid: 0,
       balanceDue: Number(total.toFixed(2))
     };
-  };
-
-  const handleSubmit = async () => {
-    if (!selectedCustomer) {
-      toast({
-        title: "Error",
-        description: "Please select a customer",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("Not authenticated");
-
-      const { data: businessProfile } = await supabase
-        .from('business_profiles')
-        .select('id')
-        .eq('user_id', user.id)
-        .single();
-
-      if (!businessProfile) throw new Error("Business profile not found");
-
-      const { subtotal, tax, total } = calculateTotals();
-
-      const invoiceData = {
-        business_id: businessProfile.id,
-        customer_id: selectedCustomer,
-        invoice_number: invoiceNumber,
-        customer_po_number: customerPO,
-        issue_date: issueDate,
-        due_date: dueDate,
-        notes,
-        subtotal,
-        tax,
-        total,
-        amount_paid: 0,
-        balance_due: total,
-        is_tax_inclusive: isTaxInclusive,
-        status: 'draft'
-      };
-
-      let invoiceId;
-
-      if (existingInvoiceId) {
-        // Update existing invoice
-        const { data: updatedInvoice, error: updateError } = await supabase
-          .from('invoices')
-          .update(invoiceData)
-          .eq('id', existingInvoiceId)
-          .select()
-          .single();
-
-        if (updateError) throw updateError;
-        invoiceId = existingInvoiceId;
-
-        // Delete existing items first
-        const { error: deleteError } = await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', existingInvoiceId);
-
-        if (deleteError) throw deleteError;
-      } else {
-        // Create new invoice
-        const { data: newInvoice, error: invoiceError } = await supabase
-          .from('invoices')
-          .insert([invoiceData])
-          .select()
-          .single();
-
-        if (invoiceError) throw invoiceError;
-        invoiceId = newInvoice.id;
-      }
-
-      // Wait for deletion to complete (if updating) before inserting new items
-      if (items.length > 0) {
-        const { error: itemsError } = await supabase
-          .from('invoice_items')
-          .insert(
-            items.map(item => ({
-              id: undefined, // Ensure we don't send an id to avoid conflicts
-              invoice_id: invoiceId,
-              description: item.description,
-              category: item.category,
-              amount: item.amount,
-              job: item.job,
-              tax_code: item.tax_code
-            }))
-          );
-
-        if (itemsError) throw itemsError;
-      }
-
-      // Add activity
-      const { error: activityError } = await supabase
-        .from('invoice_activities')
-        .insert([{
-          invoice_id: invoiceId,
-          activity_type: existingInvoiceId ? 'update' : 'create',
-          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created'
-        }]);
-
-      if (activityError) throw activityError;
-
-      toast({
-        title: "Success",
-        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
-      });
-      navigate("/dashboard/invoices");
-    } catch (error: any) {
-      console.error('Error saving invoice:', error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to save invoice",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const totals = calculateTotals();
