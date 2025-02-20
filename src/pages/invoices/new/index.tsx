@@ -57,6 +57,7 @@ interface Customer {
   company_name: string | null;
   first_name: string | null;
   surname: string | null;
+  billing_email?: string | null;
 }
 
 interface Activity {
@@ -125,6 +126,22 @@ export default function NewInvoice() {
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
+  const handleOpenShareDialog = () => {
+    if (selectedCustomer) {
+      const customer = customers.find(c => c.id === selectedCustomer);
+      if (customer?.billing_email) {
+        setShareEmail(customer.billing_email);
+      }
+    }
+    setIsShareDialogOpen(true);
+  };
+
+  const handleCloseShareDialog = () => {
+    setIsShareDialogOpen(false);
+    setShareEmail("");
+    setShareMessage("");
+  };
 
   useEffect(() => {
     const initialize = async () => {
@@ -330,7 +347,7 @@ export default function NewInvoice() {
 
       const { data: customersList, error } = await supabase
         .from('customers')
-        .select('id, company_name, first_name, surname')
+        .select('id, company_name, first_name, surname, billing_email')
         .eq('business_id', businessProfile.id);
 
       if (error) throw error;
@@ -442,7 +459,7 @@ export default function NewInvoice() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setIsShareDialogOpen(true)}>
+                  <DropdownMenuItem onClick={handleOpenShareDialog}>
                     <Mail className="mr-2 h-4 w-4" />
                     Email invoice
                   </DropdownMenuItem>
@@ -708,7 +725,7 @@ export default function NewInvoice() {
         </div>
       </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={setIsShareDialogOpen}>
+      <Dialog open={isShareDialogOpen} onOpenChange={handleCloseShareDialog}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
@@ -736,7 +753,7 @@ export default function NewInvoice() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setIsShareDialogOpen(false)}>
+            <Button variant="outline" onClick={handleCloseShareDialog}>
               Cancel
             </Button>
             <Button onClick={handleShareInvoice} disabled={isSending}>
