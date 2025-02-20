@@ -2,6 +2,9 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import Stripe from 'https://esm.sh/stripe@14.21.0?target=deno';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.7';
+import { Resend } from 'npm:resend@2.0.0';
+import { renderAsync } from 'npm:@react-email/components@0.0.22';
+import { PaymentReceivedEmail } from '../send-invoice/_templates/payment-received.tsx';
 
 const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
   apiVersion: '2023-10-16',
@@ -10,6 +13,8 @@ const stripe = new Stripe(Deno.env.get('STRIPE_SECRET_KEY') ?? '', {
 const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
 const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 const supabase = createClient(supabaseUrl, supabaseKey);
+
+const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -38,17 +43,25 @@ serve(async (req) => {
         const metadata = sessionOrIntent.metadata || {};
         const invoiceId = metadata.invoiceId;
         
-        // Get the correct amount from the payment
         const rawAmount = sessionOrIntent.amount_total || sessionOrIntent.amount;
-        const amountPaid = parseFloat((rawAmount / 100).toFixed(2)); // Ensure proper decimal formatting
+        const amountPaid = parseFloat((rawAmount / 100).toFixed(2));
 
         if (invoiceId) {
           console.log(`Processing payment for invoice ${invoiceId} - Amount: $${amountPaid}`);
 
-          // First, fetch current invoice data
-          const { data: currentInvoice, error: fetchError } = await supabase
+          // Fetch invoice with customer details
+          const { data: invoice, error: fetchError } = await supabase
             .from('invoices')
-            .select('total, amount_paid, balance_due')
+            .select(`
+              *,
+              customers (
+                first_name,
+                surname,
+                company_name,
+                organization_type,
+                billing_email
+              )
+            `)
             .eq('id', invoiceId)
             .single();
 
@@ -57,19 +70,13 @@ serve(async (req) => {
             throw fetchError;
           }
 
-          console.log('Current invoice state:', currentInvoice);
+          console.log('Current invoice state:', invoice);
 
           // Calculate new values
-          const currentAmountPaid = parseFloat((currentInvoice.amount_paid || 0).toFixed(2));
+          const currentAmountPaid = parseFloat((invoice.amount_paid || 0).toFixed(2));
           const newAmountPaid = currentAmountPaid + amountPaid;
-          const newBalanceDue = Math.max(0, currentInvoice.total - newAmountPaid);
+          const newBalanceDue = Math.max(0, invoice.total - newAmountPaid);
           const newStatus = newBalanceDue === 0 ? 'paid' : 'sent';
-
-          console.log('Updating invoice with:', {
-            status: newStatus,
-            amount_paid: newAmountPaid,
-            balance_due: newBalanceDue
-          });
 
           // Update invoice
           const { error: updateError } = await supabase
@@ -87,7 +94,7 @@ serve(async (req) => {
             throw updateError;
           }
 
-          // Log payment activity with specific amount
+          // Log payment activity
           const { error: activityError } = await supabase
             .from('invoice_activities')
             .insert([{
@@ -99,6 +106,40 @@ serve(async (req) => {
           if (activityError) {
             console.error('Error logging activity:', activityError);
             throw activityError;
+          }
+
+          // Send email confirmation
+          if (invoice.customers?.billing_email) {
+            const customerName = invoice.customers.organization_type === 'company' 
+              ? invoice.customers.company_name 
+              : `${invoice.customers.first_name} ${invoice.customers.surname}`;
+
+            try {
+              const emailHtml = await renderAsync(
+                PaymentReceivedEmail({
+                  customerName,
+                  invoiceNumber: invoice.invoice_number,
+                  amountPaid,
+                  invoiceTotal: invoice.total,
+                })
+              );
+
+              const { data: emailResult, error: emailError } = await resend.emails.send({
+                from: 'Acme <onboarding@resend.dev>',
+                to: [invoice.customers.billing_email],
+                subject: `Payment Received for Invoice ${invoice.invoice_number}`,
+                html: emailHtml,
+              });
+
+              if (emailError) {
+                console.error('Error sending email:', emailError);
+                throw emailError;
+              }
+
+              console.log('Payment confirmation email sent:', emailResult);
+            } catch (emailError) {
+              console.error('Error sending payment confirmation email:', emailError);
+            }
           }
 
           console.log('Successfully updated invoice and logged payment activity');
