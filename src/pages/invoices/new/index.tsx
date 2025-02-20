@@ -57,6 +57,7 @@ interface Customer {
   company_name: string | null;
   first_name: string | null;
   surname: string | null;
+  billing_email: string | null;
 }
 
 interface Activity {
@@ -339,7 +340,7 @@ export default function NewInvoice() {
 
       const { data: customersList, error } = await supabase
         .from('customers')
-        .select('id, company_name, first_name, surname')
+        .select('id, company_name, first_name, surname, billing_email')
         .eq('business_id', businessProfile.id);
 
       if (error) throw error;
@@ -382,6 +383,25 @@ export default function NewInvoice() {
   };
 
   const totals = calculateTotals();
+
+  const handleShareClick = () => {
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Please select a customer first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Find the selected customer's email
+    const customer = customers.find(c => c.id === selectedCustomer);
+    if (customer) {
+      setShareEmail(customer.billing_email || ''); // Use billing email as default
+    }
+    
+    setIsShareDialogOpen(true);
+  };
 
   const handleShareInvoice = async () => {
     if (!existingInvoiceId) {
@@ -434,38 +454,38 @@ export default function NewInvoice() {
 
       console.log('Sending request with data:', requestData);
 
-      const { data, error } = await supabase.functions.invoke('create-payment-link', {
-        body: requestData,
+      const response = await supabase.functions.invoke('create-payment-link', {
+        body: JSON.stringify(requestData),
         headers: {
           'Content-Type': 'application/json',
           'x-deno-subhost': 'edge-functions'
         }
       });
 
-      if (error) {
-        console.error('Supabase function error:', error);
-        throw error;
+      if (response.error) {
+        throw new Error(response.error.message);
       }
 
-      if (!data?.url) {
-        throw new Error('No payment URL received from the server');
+      if (!response.data?.url) {
+        throw new Error('No payment URL received');
       }
 
-      console.log('Payment link created successfully:', data);
+      // Open payment link in new window
+      window.open(response.data.url, '_blank');
 
       toast({
         title: "Success",
-        description: "Invoice shared successfully",
+        description: "Payment link created successfully",
       });
 
       setIsShareDialogOpen(false);
       setShareEmail('');
       setShareMessage('');
     } catch (error: any) {
-      console.error('Error sharing invoice:', error);
+      console.error('Error creating payment link:', error);
       toast({
         title: "Error",
-        description: error.message || "Failed to share invoice",
+        description: error.message || "Failed to create payment link",
         variant: "destructive",
       });
     } finally {
@@ -480,6 +500,7 @@ export default function NewInvoice() {
     setIsSending(false);
   };
 
+  // Update the Dialog trigger to use our new handleShareClick
   return (
     <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
@@ -509,7 +530,7 @@ export default function NewInvoice() {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => setIsShareDialogOpen(true)}>
+                  <DropdownMenuItem onClick={handleShareClick}>
                     <Mail className="mr-2 h-4 w-4" />
                     Email invoice
                   </DropdownMenuItem>
