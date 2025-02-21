@@ -67,6 +67,18 @@ interface Activity {
   created_at: string;
 }
 
+interface InvoiceItem {
+  id?: string;
+  invoice_id?: string;
+  description: string;
+  category: string;
+  quantity: number;
+  unit_amount: number;
+  amount: number;
+  job: string;
+  tax_code: string;
+}
+
 interface InvoiceData {
   id: string;
   business_id: string;
@@ -85,16 +97,6 @@ interface InvoiceData {
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 }
 
-interface InvoiceItem {
-  id?: string;
-  invoice_id?: string;
-  description: string;
-  category: string;
-  amount: number;
-  job: string;
-  tax_code: string;
-}
-
 export default function NewInvoice() {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -109,7 +111,15 @@ export default function NewInvoice() {
   );
   const [isTaxInclusive, setIsTaxInclusive] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+    { 
+      description: "", 
+      category: "4-1400 Sales", 
+      quantity: 1,
+      unit_amount: 0,
+      amount: 0,
+      job: "", 
+      tax_code: "GST" 
+    },
   ]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -314,6 +324,8 @@ export default function NewInvoice() {
           invoice_id: invoiceId,
           description: item.description || '',
           category: item.category || '4-1400 Sales',
+          quantity: Number(item.quantity) || 1,
+          unit_amount: Number(item.unit_amount) || 0,
           amount: Number(item.amount) || 0,
           job: item.job || '',
           tax_code: item.tax_code || 'GST'
@@ -401,13 +413,29 @@ export default function NewInvoice() {
   const addItem = () => {
     setItems([
       ...items,
-      { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+      { 
+        description: "", 
+        category: "4-1400 Sales", 
+        quantity: 1,
+        unit_amount: 0,
+        amount: 0,
+        job: "", 
+        tax_code: "GST" 
+      },
     ]);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
+    
+    // Calculate amount when quantity or unit_amount changes
+    if (field === 'quantity' || field === 'unit_amount') {
+      const quantity = field === 'quantity' ? parseFloat(value) || 0 : newItems[index].quantity;
+      const unitAmount = field === 'unit_amount' ? parseFloat(value) || 0 : newItems[index].unit_amount;
+      newItems[index].amount = quantity * unitAmount;
+    }
+    
     setItems(newItems);
   };
 
@@ -609,7 +637,9 @@ export default function NewInvoice() {
                 <tr className="text-left">
                   <th className="pb-2">Description</th>
                   <th className="pb-2">Category *</th>
-                  <th className="pb-2">Amount ($) *</th>
+                  <th className="pb-2 w-24">Quantity *</th>
+                  <th className="pb-2 w-32">Unit Amount ($) *</th>
+                  <th className="pb-2 w-32">Amount ($)</th>
                   <th className="pb-2">Job</th>
                   <th className="pb-2">Tax code *</th>
                   <th className="pb-2"></th>
@@ -640,8 +670,25 @@ export default function NewInvoice() {
                     <td className="py-2">
                       <Input
                         type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unit_amount}
+                        onChange={(e) => updateItem(index, "unit_amount", e.target.value)}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
                         value={item.amount}
-                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                        readOnly
+                        disabled
                       />
                     </td>
                     <td className="py-2">

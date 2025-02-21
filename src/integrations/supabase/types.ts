@@ -229,7 +229,9 @@ export type Database = {
           id: string
           invoice_id: string
           job: string | null
+          quantity: number
           tax_code: string | null
+          unit_amount: number
           updated_at: string
         }
         Insert: {
@@ -240,7 +242,9 @@ export type Database = {
           id?: string
           invoice_id: string
           job?: string | null
+          quantity?: number
           tax_code?: string | null
+          unit_amount?: number
           updated_at?: string
         }
         Update: {
@@ -251,7 +255,9 @@ export type Database = {
           id?: string
           invoice_id?: string
           job?: string | null
+          quantity?: number
           tax_code?: string | null
+          unit_amount?: number
           updated_at?: string
         }
         Relationships: [
