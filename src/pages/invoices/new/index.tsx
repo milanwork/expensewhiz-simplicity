@@ -132,6 +132,8 @@ export default function NewInvoice() {
   const [isSending, setIsSending] = useState(false);
 
   const refreshInvoiceData = async (invoiceId: string) => {
+    console.log('Refreshing invoice data for ID:', invoiceId);
+    
     const { data: invoice, error } = await supabase
       .from('invoices')
       .select(`
@@ -151,7 +153,15 @@ export default function NewInvoice() {
     setInvoiceStatus(invoice.status);
     setAmountPaid(invoice.amount_paid || 0);
     setBalanceDue(invoice.balance_due || 0);
-    setItems(invoice.items || []);
+    
+    // Replace the entire items array instead of appending
+    if (invoice.items) {
+      console.log('Setting items to:', invoice.items);
+      setItems(invoice.items);
+    } else {
+      console.log('No items found, setting empty array');
+      setItems([]);
+    }
   };
 
   const handleOpenShareDialog = () => {
