@@ -20,6 +20,7 @@ interface BusinessProfile {
   state: string | null;
   country: string | null;
   postcode: string | null;
+  pdf_notes_template: string | null;
 }
 
 const Profile = () => {
@@ -49,6 +50,8 @@ const Profile = () => {
   const [phone, setPhone] = useState("");
   const [fax, setFax] = useState("");
 
+  const [pdfNotesTemplate, setPdfNotesTemplate] = useState("");
+  
   useEffect(() => {
     getProfiles();
   }, []);
@@ -85,6 +88,7 @@ const Profile = () => {
         setClientCode(businessData.client_id || "");
         setAddress(businessData.address_line1 || "");
         setEmail(user.email || "");
+        setPdfNotesTemplate(businessData.pdf_notes_template || "");
       }
     } catch (error: any) {
       toast({
@@ -120,6 +124,7 @@ const Profile = () => {
           business_name: businessName,
           abn_acn: abn,
           address_line1: address,
+          pdf_notes_template: pdfNotesTemplate,
           updated_at: new Date().toISOString(),
         })
         .eq("user_id", user.id);
@@ -141,7 +146,7 @@ const Profile = () => {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"> {/* Updated width */}
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
       <Button
         variant="ghost"
         className="mb-6"
@@ -151,14 +156,16 @@ const Profile = () => {
         Back to Dashboard
       </Button>
 
-      <div className="bg-white rounded-lg shadow w-full"> {/* Added w-full */}
+      <div className="bg-white rounded-lg shadow w-full">
         <Tabs defaultValue="business" className="w-full">
-          <TabsList className="grid w-full grid-cols-2">
+          <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="personal">Personal Details</TabsTrigger>
             <TabsTrigger value="business">Business Details</TabsTrigger>
+            <TabsTrigger value="templates">Templates</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="personal" className="p-8"> {/* Increased padding */}
+          {/* Personal Details Tab */}
+          <TabsContent value="personal" className="p-8">
             <h2 className="text-lg font-medium text-gray-900 mb-4">Personal Details</h2>
             <div className="space-y-4">
               <div>
@@ -182,7 +189,8 @@ const Profile = () => {
             </div>
           </TabsContent>
           
-          <TabsContent value="business" className="p-8"> {/* Increased padding */}
+          {/* Business Details Tab */}
+          <TabsContent value="business" className="p-8">
             <div className="space-y-8">
               {/* Business Details Section */}
               <div>
@@ -308,6 +316,46 @@ const Profile = () => {
                       onChange={(e) => setFax(e.target.value)}
                       placeholder="Enter fax number"
                     />
+                  </div>
+                </div>
+              </div>
+
+              <Button
+                className="w-full mt-8"
+                onClick={updateProfiles}
+              >
+                Save changes
+              </Button>
+            </div>
+          </TabsContent>
+
+          {/* Templates Tab */}
+          <TabsContent value="templates" className="p-8">
+            <div className="space-y-8">
+              <div>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">PDF Output Settings</h2>
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="pdfNotesTemplate">Default PDF Notes Template</Label>
+                    <div className="mt-2">
+                      <Textarea
+                        id="pdfNotesTemplate"
+                        value={pdfNotesTemplate}
+                        onChange={(e) => {
+                          if (e.target.value.length <= 500) {
+                            setPdfNotesTemplate(e.target.value);
+                          }
+                        }}
+                        placeholder="Enter default notes template for PDF invoices"
+                        className="h-32"
+                      />
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        {`${pdfNotesTemplate.length}/500 characters`}
+                      </div>
+                    </div>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      This text will appear in the bottom left part of your PDF invoices.
+                    </p>
                   </div>
                 </div>
               </div>
