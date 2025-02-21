@@ -90,6 +90,8 @@ interface InvoiceItem {
   invoice_id?: string;
   description: string;
   category: string;
+  quantity: number;
+  unit_amount: number;
   amount: number;
   job: string;
   tax_code: string;
@@ -109,7 +111,15 @@ export default function NewInvoice() {
   );
   const [isTaxInclusive, setIsTaxInclusive] = useState(false);
   const [items, setItems] = useState<InvoiceItem[]>([
-    { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+    { 
+      description: "", 
+      category: "4-1400 Sales", 
+      quantity: 1,
+      unit_amount: 0,
+      amount: 0, 
+      job: "", 
+      tax_code: "GST" 
+    },
   ]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -232,6 +242,15 @@ export default function NewInvoice() {
   }, []);
 
   const removeItem = (index: number) => {
+    if (invoiceStatus === 'paid') {
+      toast({
+        title: "Cannot modify paid invoice",
+        description: "Paid invoices cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newItems = [...items];
     newItems.splice(index, 1);
     setItems(newItems);
@@ -314,6 +333,8 @@ export default function NewInvoice() {
           invoice_id: invoiceId,
           description: item.description || '',
           category: item.category || '4-1400 Sales',
+          quantity: Number(item.quantity) || 0,
+          unit_amount: Number(item.unit_amount) || 0,
           amount: Number(item.amount) || 0,
           job: item.job || '',
           tax_code: item.tax_code || 'GST'
@@ -399,15 +420,49 @@ export default function NewInvoice() {
   };
 
   const addItem = () => {
+    if (invoiceStatus === 'paid') {
+      toast({
+        title: "Cannot modify paid invoice",
+        description: "Paid invoices cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setItems([
       ...items,
-      { description: "", category: "4-1400 Sales", amount: 0, job: "", tax_code: "GST" },
+      { 
+        description: "", 
+        category: "4-1400 Sales", 
+        quantity: 1,
+        unit_amount: 0,
+        amount: 0, 
+        job: "", 
+        tax_code: "GST" 
+      },
     ]);
   };
 
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
+    if (invoiceStatus === 'paid') {
+      toast({
+        title: "Cannot modify paid invoice",
+        description: "Paid invoices cannot be modified",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
+    
+    // Update amount when quantity or unit_amount changes
+    if (field === 'quantity' || field === 'unit_amount') {
+      const quantity = field === 'quantity' ? value : newItems[index].quantity;
+      const unitAmount = field === 'unit_amount' ? value : newItems[index].unit_amount;
+      newItems[index].amount = quantity * unitAmount;
+    }
+    
     setItems(newItems);
   };
 
@@ -609,6 +664,8 @@ export default function NewInvoice() {
                 <tr className="text-left">
                   <th className="pb-2">Description</th>
                   <th className="pb-2">Category *</th>
+                  <th className="pb-2">Quantity *</th>
+                  <th className="pb-2">Unit Amount ($) *</th>
                   <th className="pb-2">Amount ($) *</th>
                   <th className="pb-2">Job</th>
                   <th className="pb-2">Tax code *</th>
@@ -622,12 +679,14 @@ export default function NewInvoice() {
                       <Input
                         value={item.description}
                         onChange={(e) => updateItem(index, "description", e.target.value)}
+                        disabled={invoiceStatus === 'paid'}
                       />
                     </td>
                     <td className="py-2">
                       <Select
                         value={item.category}
                         onValueChange={(value) => updateItem(index, "category", value)}
+                        disabled={invoiceStatus === 'paid'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -640,20 +699,41 @@ export default function NewInvoice() {
                     <td className="py-2">
                       <Input
                         type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(index, "quantity", parseInt(e.target.value) || 0)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unit_amount}
+                        onChange={(e) => updateItem(index, "unit_amount", parseFloat(e.target.value) || 0)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
+                    </td>
+                    <td className="py-2">
+                      <Input
+                        type="number"
                         value={item.amount}
-                        onChange={(e) => updateItem(index, "amount", parseFloat(e.target.value))}
+                        readOnly
+                        disabled
                       />
                     </td>
                     <td className="py-2">
                       <Input
                         value={item.job}
                         onChange={(e) => updateItem(index, "job", e.target.value)}
+                        disabled={invoiceStatus === 'paid'}
                       />
                     </td>
                     <td className="py-2">
                       <Select
                         value={item.tax_code}
                         onValueChange={(value) => updateItem(index, "tax_code", value)}
+                        disabled={invoiceStatus === 'paid'}
                       >
                         <SelectTrigger>
                           <SelectValue />
@@ -669,6 +749,7 @@ export default function NewInvoice() {
                         variant="ghost"
                         size="icon"
                         onClick={() => removeItem(index)}
+                        disabled={invoiceStatus === 'paid'}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -677,7 +758,11 @@ export default function NewInvoice() {
                 ))}
               </tbody>
             </table>
-            <Button variant="outline" onClick={addItem}>
+            <Button 
+              variant="outline" 
+              onClick={addItem}
+              disabled={invoiceStatus === 'paid'}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add line item
             </Button>
@@ -689,9 +774,10 @@ export default function NewInvoice() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               className="h-24"
+              disabled={invoiceStatus === 'paid'}
             />
             <div className="flex items-center mt-2">
-              <Checkbox id="saveDefault" />
+              <Checkbox id="saveDefault" disabled={invoiceStatus === 'paid'} />
               <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
             </div>
           </div>
@@ -762,6 +848,48 @@ export default function NewInvoice() {
               </div>
             </CollapsibleContent>
           </Collapsible>
+        </div>
+      </div>
+
+      {/* Activity Log Section - Moved to bottom */}
+      <div className="mt-8 border-t pt-8">
+        <div className="bg-white rounded-lg shadow">
+          <div className="p-4 flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Activity Log</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsActivityLogOpen(!isActivityLogOpen)}
+              className="w-9 p-0"
+            >
+              {isActivityLogOpen ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+          {isActivityLogOpen && (
+            <div className="px-4 pb-4">
+              <ScrollArea className="h-[200px]">
+                <div className="space-y-4">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="border-b pb-4">
+                      <div className="text-sm font-medium">
+                        {activity.activity_type}
+                      </div>
+                      <div className="text-sm text-gray-600">
+                        {activity.description}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">
+                        {format(new Date(activity.created_at), 'dd/MM/yyyy h:mm a')}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
         </div>
       </div>
 
