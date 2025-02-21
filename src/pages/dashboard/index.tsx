@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { useNavigate, Outlet } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -8,7 +9,6 @@ import {
   ShoppingCart,
   Receipt,
   BarChart3,
-  Wallet,
   Building2,
   ScrollText,
   Bell,
@@ -34,6 +34,20 @@ interface Profile {
   first_name: string | null;
   last_name: string | null;
   avatar_url: string | null;
+}
+
+interface MenuItem {
+  icon: any;
+  label: string;
+  path: string;
+  badge?: string;
+  subItems?: SubMenuItem[];
+}
+
+interface SubMenuItem {
+  label: string;
+  path: string;
+  badge?: string;
 }
 
 const Dashboard = () => {
@@ -75,12 +89,13 @@ const Dashboard = () => {
     navigate("/");
   };
 
-  const menuItems = [
+  const menuItems: MenuItem[] = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
     { icon: Users, label: "Contacts", path: "/dashboard/contacts" },
     { 
       icon: CreditCard, 
       label: "Sales & Payment", 
+      path: "/dashboard/sales",
       subItems: [
         { label: "Estimates", path: "/dashboard/estimates" },
         { label: "Invoices", path: "/dashboard/invoices" },
@@ -92,7 +107,7 @@ const Dashboard = () => {
     { icon: Building2, label: "Banking", path: "/dashboard/banking" },
   ];
 
-  const bottomMenuItems = [
+  const bottomMenuItems: MenuItem[] = [
     { icon: UserCog, label: "Manage Account", path: "/dashboard/profile" },
     { icon: HelpCircle, label: "Help and Support", path: "/dashboard/support" },
     { icon: Bell, label: "Notifications", path: "/dashboard/notifications", badge: "9+" },

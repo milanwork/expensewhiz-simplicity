@@ -1,35 +1,31 @@
-import { jsPDF } from 'jspdf';
+
+import { jsPDF } from "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.es.min.js";
 
 interface Invoice {
+  id: string;
   invoice_number: string;
   issue_date: string;
   due_date: string;
-  customer_po_number: string | null;
   notes: string | null;
-  subtotal: number;
-  tax: number;
+  status: string;
   total: number;
-  amount_paid: number;
-  balance_due: number;
-  status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
-  invoice_items: {
-    description: string | null;
-    category: string;
+  tax: number;
+  invoice_items: Array<{
+    description: string;
     amount: number;
-    job: string;
     tax_code: string;
-  }[];
+  }>;
 }
 
 interface BusinessProfile {
   business_name: string | null;
+  abn_acn: string | null;
   address_line1: string | null;
   city: string | null;
   state: string | null;
   postcode: string | null;
   phone: string | null;
   email: string | null;
-  abn_acn: string | null;
   pdf_notes_template: string | null;
 }
 
@@ -72,73 +68,61 @@ export async function generatePDF(
   doc.setFontSize(20);
   doc.text('Tax invoice', 20, yPos + 20);
 
-  // Invoice Details Grid
+  // Invoice Details
   doc.setFontSize(10);
   const gridStartY = yPos + 30;
-  doc.text('Invoice number', 400, gridStartY);
-  doc.text('Issue date', 500, gridStartY);
-  doc.text('Due date', 600, gridStartY);
-  
-  doc.text(invoice.invoice_number, 400, gridStartY + 15);
-  doc.text(invoice.issue_date, 500, gridStartY + 15);
-  doc.text(invoice.due_date, 600, gridStartY + 15);
+  doc.text('Invoice number:', 120, gridStartY);
+  doc.text(invoice.invoice_number, 160, gridStartY);
+  doc.text('Issue date:', 120, gridStartY + 7);
+  doc.text(invoice.issue_date, 160, gridStartY + 7);
+  doc.text('Due date:', 120, gridStartY + 14);
+  doc.text(invoice.due_date, 160, gridStartY + 14);
 
   // Bill To
-  doc.text('Bill to', 20, gridStartY + 40);
-  doc.text(customer.company_name || `${customer.first_name} ${customer.surname}`, 20, gridStartY + 55);
+  doc.text('Bill to:', 20, gridStartY + 30);
+  doc.text(customer.company_name || `${customer.first_name} ${customer.surname}`, 20, gridStartY + 37);
 
   // Items Table
-  const tableTop = gridStartY + 80;
+  const tableTop = gridStartY + 50;
   doc.setFillColor(240, 240, 240);
-  doc.rect(20, tableTop, doc.internal.pageSize.width - 40, 10, 'F');
+  doc.rect(20, tableTop, 170, 10, 'F');
   
   doc.text('Description', 30, tableTop + 7);
-  doc.text('Tax', 450, tableTop + 7);
-  doc.text('Amount ($)', 500, tableTop + 7, { align: 'right' });
+  doc.text('Tax', 140, tableTop + 7);
+  doc.text('Amount ($)', 160, tableTop + 7);
   
   let itemY = tableTop + 20;
   invoice.invoice_items.forEach(item => {
     doc.text(item.description || '', 30, itemY);
-    doc.text(item.tax_code || '', 450, itemY);
-    doc.text(item.amount.toFixed(2), 500, itemY, { align: 'right' });
-    itemY += 15;
+    doc.text(item.tax_code || '', 140, itemY);
+    doc.text(item.amount.toFixed(2), 160, itemY);
+    itemY += 10;
   });
 
   // Totals
-  const totalsY = itemY + 20;
-  doc.text('Tax', 400, totalsY);
-  doc.text(invoice.tax.toFixed(2), 500, totalsY, { align: 'right' });
+  const totalsY = Math.max(itemY + 20, tableTop + 120);
+  doc.text('Tax:', 140, totalsY);
+  doc.text(invoice.tax.toFixed(2), 160, totalsY);
   
-  doc.text('Total Amount (inc. tax)', 400, totalsY + 15);
-  doc.text(invoice.total.toFixed(2), 500, totalsY + 15, { align: 'right' });
-  
-  doc.text('Total paid', 400, totalsY + 30);
-  doc.text('0.00', 500, totalsY + 30, { align: 'right' });
-  
-  doc.text('Balance due', 400, totalsY + 45);
-  doc.text(invoice.total.toFixed(2), 500, totalsY + 45, { align: 'right' });
+  doc.text('Total Amount:', 140, totalsY + 10);
+  doc.text(invoice.total.toFixed(2), 160, totalsY + 10);
 
-  // Notes Section (including pdf_notes_template)
-  const notesY = totalsY + 70;
-  doc.text('Notes', 20, notesY);
+  // Add pdf_notes_template at the bottom left
   if (business.pdf_notes_template) {
     doc.setFontSize(9);
-    doc.text(business.pdf_notes_template, 20, notesY + 10);
-  }
-  if (invoice.notes) {
-    doc.setFontSize(10);
-    doc.text(invoice.notes, 20, notesY + 30);
+    doc.text(business.pdf_notes_template, 20, doc.internal.pageSize.height - 30);
   }
 
   // Payment Status if paid
   if (invoice.status === 'paid') {
     doc.setFontSize(24);
     doc.setTextColor(0, 150, 0);
-    doc.text('PAID', doc.internal.pageSize.width - 60, 40, { align: 'right' });
+    doc.text('PAID', 160, 40);
     if (paymentDate) {
       doc.setFontSize(12);
-      doc.text(`Paid on ${paymentDate}`, doc.internal.pageSize.width - 60, 50, { align: 'right' });
+      doc.text(`Paid on ${paymentDate}`, 160, 50);
     }
+    doc.setTextColor(0, 0, 0);
   }
 
   return doc.output('arraybuffer');
