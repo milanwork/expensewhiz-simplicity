@@ -278,18 +278,51 @@ export default function NewInvoice() {
     }
 
     const { subtotal, tax, total } = calculateTotals();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data: businessProfile } = await supabase
+      .from('business_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!businessProfile) throw new Error("Business profile not found");
+
+    // Define invoice data before the status check
+    const invoiceData = {
+      business_id: businessProfile.id,
+      customer_id: selectedCustomer,
+      invoice_number: invoiceNumber,
+      customer_po_number: customerPO || null,
+      issue_date: issueDate,
+      due_date: dueDate,
+      notes: notes || null,
+      subtotal,
+      tax,
+      total,
+      amount_paid: amountPaid,
+      balance_due: balanceDue,
+      is_tax_inclusive: isTaxInclusive,
+      status: invoiceStatus
+    };
 
     // Check if this is a paid invoice with changes
-    if (existingInvoiceId && invoiceStatus === 'paid' && total !== totals.total) {
-      setPendingInvoiceChanges({
-        ...invoiceData,
-        subtotal,
-        tax,
-        total,
-        status: 'draft' as const
-      });
-      setShowStatusChangeDialog(true);
-      return;
+    if (existingInvoiceId && invoiceStatus === 'paid') {
+      const { data: currentInvoice } = await supabase
+        .from('invoices')
+        .select('total')
+        .eq('id', existingInvoiceId)
+        .single();
+
+      if (currentInvoice && currentInvoice.total !== total) {
+        setPendingInvoiceChanges({
+          ...invoiceData,
+          status: 'draft'
+        });
+        setShowStatusChangeDialog(true);
+        return;
+      }
     }
 
     await saveInvoice(subtotal, tax, total);
@@ -398,7 +431,7 @@ export default function NewInvoice() {
       }];
 
       // Add status change activity if applicable
-      if (existingInvoiceId && invoiceStatus === 'draft' && invoiceData.status === 'draft') {
+      if (existingInvoiceId && invoiceStatus === 'draft' && pendingInvoiceChanges) {
         activityEntries.push({
           invoice_id: invoiceId,
           activity_type: 'status_change',
