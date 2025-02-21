@@ -35,13 +35,15 @@ interface Invoice {
   tax: number;
   total: number;
   notes?: string;
+  status: string;
   invoice_items: InvoiceItem[];
 }
 
 export async function generatePDF(
   invoice: Invoice,
   business: BusinessProfile,
-  customer: Customer
+  customer: Customer,
+  paymentDate?: string | null
 ): Promise<Uint8Array> {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.width;
@@ -72,14 +74,22 @@ export async function generatePDF(
   }
 
   // Invoice Details
-  yPosition += 20;
   doc.setFontSize(16);
   doc.text(`Invoice #${invoice.invoice_number}`, pageWidth - 60, 20, { align: 'right' });
   doc.setFontSize(10);
   doc.text(`Issue Date: ${invoice.issue_date}`, pageWidth - 60, 30, { align: 'right' });
-  doc.text(`Due Date: ${invoice.due_date}`, pageWidth - 60, 35, { align: 'right' });
+  
+  // Show payment date if paid, otherwise show due date
+  if (invoice.status === 'paid' && paymentDate) {
+    doc.setTextColor(0, 150, 0); // Green color for paid status
+    doc.text(`Paid on: ${paymentDate}`, pageWidth - 60, 35, { align: 'right' });
+    doc.setTextColor(0, 0, 0); // Reset to black
+  } else {
+    doc.text(`Due Date: ${invoice.due_date}`, pageWidth - 60, 35, { align: 'right' });
+  }
 
   // Bill To
+  yPosition = 60;
   doc.setFontSize(12);
   doc.text('Bill To:', 20, yPosition);
   yPosition += 7;
@@ -128,6 +138,14 @@ export async function generatePDF(
   yPosition += 7;
   doc.text('Total:', pageWidth - 80, yPosition);
   doc.text(`$${invoice.total.toFixed(2)}`, pageWidth - 60, yPosition, { align: 'right' });
+
+  // Payment Status
+  if (invoice.status === 'paid') {
+    doc.setTextColor(0, 150, 0); // Green color
+    doc.setFontSize(14);
+    doc.text('PAID', pageWidth - 40, yPosition + 20, { align: 'right' });
+    doc.setTextColor(0, 0, 0); // Reset to black
+  }
 
   // Notes
   if (invoice.notes) {

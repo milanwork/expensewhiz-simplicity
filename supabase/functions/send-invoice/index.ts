@@ -28,14 +28,15 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { invoiceId, recipientEmail, message } = await req.json() as SendInvoiceRequest;
 
-    // Step 1: Fetch invoice details first
+    // Fetch invoice details with payment activities
     const { data: invoice, error: invoiceError } = await supabase
       .from('invoices')
       .select(`
         *,
         customers:customer_id (*),
         business_profiles:business_id (*),
-        invoice_items (*)
+        invoice_items (*),
+        invoice_activities (*)
       `)
       .eq('id', invoiceId)
       .single();
@@ -44,51 +45,73 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error('Invoice not found');
     }
 
-    console.log('Creating payment link for invoice:', invoice.invoice_number);
+    console.log('Processing invoice:', invoice);
 
-    // Step 2: Create payment link using Supabase client
-    const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment-link', {
-      body: {
-        invoiceId: invoice.id,
-        amount: invoice.total,
-        customerEmail: recipientEmail,
-        description: `Payment for invoice ${invoice.invoice_number}`,
-      },
-    });
-
-    if (paymentError || !paymentData) {
-      console.error('Payment link error:', paymentError);
-      throw new Error(`Failed to create payment link: ${paymentError?.message || 'Unknown error'}`);
+    // Find payment date if invoice is paid
+    let paymentDate = null;
+    if (invoice.status === 'paid') {
+      const paymentActivity = invoice.invoice_activities?.find(
+        (activity: any) => activity.activity_type === 'payment_received'
+      );
+      if (paymentActivity) {
+        paymentDate = new Date(paymentActivity.created_at).toLocaleDateString();
+      }
     }
 
-    const paymentUrl = paymentData.url;
-    if (!paymentUrl) {
-      throw new Error('Payment URL not received from Stripe');
+    // Only create payment link if invoice is not paid
+    let paymentUrl = null;
+    if (invoice.status !== 'paid') {
+      console.log('Creating payment link for invoice:', invoice.invoice_number);
+      const { data: paymentData, error: paymentError } = await supabase.functions.invoke('create-payment-link', {
+        body: {
+          invoiceId: invoice.id,
+          amount: invoice.total,
+          customerEmail: recipientEmail,
+          description: `Payment for invoice ${invoice.invoice_number}`,
+        },
+      });
+
+      if (paymentError) {
+        console.error('Payment link error:', paymentError);
+        throw new Error(`Failed to create payment link: ${paymentError?.message || 'Unknown error'}`);
+      }
+
+      paymentUrl = paymentData?.url;
     }
 
-    console.log('Payment URL created:', paymentUrl);
-
-    // Step 3: Generate PDF after payment link is created
-    const pdfBuffer = await generatePDF(invoice, invoice.business_profiles, invoice.customers);
+    // Generate PDF with payment status
+    const pdfBuffer = await generatePDF(invoice, invoice.business_profiles, invoice.customers, paymentDate);
     const pdfBase64 = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
 
-    // Step 4: Send email with both PDF and payment link
-    const htmlContent = `
+    // Create email content based on invoice status
+    let htmlContent = `
       <html>
         <body>
           <h2>Invoice from ${invoice.business_profiles?.business_name || 'Our Company'}</h2>
           ${message ? `<p>${message}</p>` : ''}
           <p>Invoice Number: ${invoice.invoice_number}</p>
-          <p>Due Date: ${invoice.due_date}</p>
-          <p>Amount Due: $${invoice.balance_due}</p>
-          <p>Please find your invoice attached to this email.</p>
-          <div style="margin: 20px 0;">
-            <a href="${paymentUrl}" style="background-color: #4CAF50; color: white; padding: 14px 20px; text-decoration: none; border-radius: 4px;">
-              Pay Invoice Now
-            </a>
-          </div>
-          <p>Or copy and paste this link to pay:</p>
-          <p>${paymentUrl}</p>
+          <p>Issue Date: ${invoice.issue_date}</p>
+          ${invoice.status === 'paid' 
+            ? `<p style="color: #4CAF50;">Payment received on ${paymentDate}</p>`
+            : `<p>Due Date: ${invoice.due_date}</p>
+               <p>Amount Due: $${invoice.balance_due}</p>`
+          }
+    `;
+
+    // Only add payment button if invoice is not paid
+    if (invoice.status !== 'paid' && paymentUrl) {
+      htmlContent += `
+        <div style="margin: 20px 0;">
+          <a href="${paymentUrl}" style="background-color: #4CAF50; color: white; padding: 14px 20px; text-decoration: none; border-radius: 4px;">
+            Pay Invoice Now
+          </a>
+        </div>
+        <p>Or copy and paste this link to pay:</p>
+        <p>${paymentUrl}</p>
+      `;
+    }
+
+    htmlContent += `
           <hr/>
           <p>Total Amount: $${invoice.total}</p>
         </body>
@@ -110,13 +133,13 @@ const handler = async (req: Request): Promise<Response> => {
       ],
     });
 
-    // Step 5: Log activity after successful email send
+    // Log activity after successful email send
     await supabase
       .from('invoice_activities')
       .insert([{
         invoice_id: invoiceId,
         activity_type: 'email_sent',
-        description: `Invoice emailed to ${recipientEmail} with payment link`,
+        description: `Invoice emailed to ${recipientEmail}${invoice.status === 'paid' ? ' (Paid)' : ' with payment link'}`,
       }]);
 
     console.log("Email sent successfully:", emailResponse);
