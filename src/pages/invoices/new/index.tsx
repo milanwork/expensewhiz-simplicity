@@ -299,8 +299,23 @@ export default function NewInvoice() {
 
       let invoiceId: string;
 
+      // If it's an existing invoice
       if (existingInvoiceId) {
-        // Update existing invoice
+        console.log('Updating existing invoice:', existingInvoiceId);
+        
+        // First, delete all existing items
+        console.log('Deleting existing items');
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', existingInvoiceId);
+
+        if (deleteError) {
+          console.error('Error deleting items:', deleteError);
+          throw deleteError;
+        }
+
+        // Then update the invoice
         const { error: updateError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -308,14 +323,6 @@ export default function NewInvoice() {
 
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
-
-        // Delete all existing items first
-        const { error: deleteError } = await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', invoiceId);
-
-        if (deleteError) throw deleteError;
 
       } else {
         // Create new invoice
@@ -330,8 +337,9 @@ export default function NewInvoice() {
         invoiceId = newInvoice.id;
       }
 
-      // Insert the current items
+      // Insert current items
       if (items.length > 0) {
+        console.log('Inserting new items:', items);
         const newItems = items.map(item => ({
           invoice_id: invoiceId,
           description: item.description || '',
@@ -346,7 +354,10 @@ export default function NewInvoice() {
           .from('invoice_items')
           .insert(newItems);
 
-        if (itemsError) throw itemsError;
+        if (itemsError) {
+          console.error('Error inserting items:', itemsError);
+          throw itemsError;
+        }
       }
 
       // Add activity log entry
@@ -361,7 +372,7 @@ export default function NewInvoice() {
 
       if (activityError) throw activityError;
 
-      // Refresh invoice data after all operations
+      // Refresh invoice data
       await refreshInvoiceData(invoiceId);
 
       toast({
