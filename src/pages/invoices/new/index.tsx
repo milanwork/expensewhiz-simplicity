@@ -1,20 +1,57 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, ChevronDown, ChevronRight, MoreHorizontal, Save, Trash2, Plus, Mail, Download, Link, Printer, Share } from "lucide-react";
+import { 
+  ArrowLeft, 
+  ChevronDown, 
+  ChevronRight, 
+  MoreHorizontal, 
+  Save, 
+  Trash2, 
+  Plus, 
+  Mail,
+  Download,
+  Link,
+  Printer,
+  Share
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/lib/supabase";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+
 interface Customer {
   id: string;
   company_name: string | null;
@@ -22,12 +59,14 @@ interface Customer {
   surname: string | null;
   billing_email?: string | null;
 }
+
 interface Activity {
   id: string;
   activity_type: string;
   description: string;
   created_at: string;
 }
+
 interface InvoiceData {
   id: string;
   business_id: string;
@@ -45,6 +84,7 @@ interface InvoiceData {
   is_tax_inclusive: boolean;
   status: 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled';
 }
+
 interface InvoiceItem {
   id?: string;
   invoice_id?: string;
@@ -56,28 +96,31 @@ interface InvoiceItem {
   job: string;
   tax_code: string;
 }
+
 export default function NewInvoice() {
   const navigate = useNavigate();
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
   const [existingInvoiceId, setExistingInvoiceId] = useState<string | null>(null);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<string>("");
   const [invoiceNumber, setInvoiceNumber] = useState("");
   const [customerPO, setCustomerPO] = useState("");
   const [issueDate, setIssueDate] = useState(new Date().toISOString().split("T")[0]);
-  const [dueDate, setDueDate] = useState(new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]);
+  const [dueDate, setDueDate] = useState(
+    new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString().split("T")[0]
+  );
   const [isTaxInclusive, setIsTaxInclusive] = useState(false);
-  const [items, setItems] = useState<InvoiceItem[]>([{
-    description: "",
-    category: "4-1400 Sales",
-    quantity: 1,
-    unit_amount: 0,
-    amount: 0,
-    job: "",
-    tax_code: "GST"
-  }]);
+  const [items, setItems] = useState<InvoiceItem[]>([
+    { 
+      description: "", 
+      category: "4-1400 Sales", 
+      quantity: 1,
+      unit_amount: 0,
+      amount: 0, 
+      job: "", 
+      tax_code: "GST" 
+    },
+  ]);
   const [notes, setNotes] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(true);
@@ -89,24 +132,30 @@ export default function NewInvoice() {
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+
   const refreshInvoiceData = async (invoiceId: string) => {
-    const {
-      data: invoice,
-      error
-    } = await supabase.from('invoices').select(`
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select(`
         *,
         items:invoice_items(*)
-      `).eq('id', invoiceId).single();
+      `)
+      .eq('id', invoiceId)
+      .single();
+
     if (error) {
       console.error('Error fetching invoice:', error);
       return;
     }
+
     console.log('Refreshed invoice data:', invoice);
+    
     setInvoiceStatus(invoice.status);
     setAmountPaid(invoice.amount_paid || 0);
     setBalanceDue(invoice.balance_due || 0);
     setItems(invoice.items || []);
   };
+
   const handleOpenShareDialog = () => {
     if (selectedCustomer) {
       const customer = customers.find(c => c.id === selectedCustomer);
@@ -116,28 +165,28 @@ export default function NewInvoice() {
     }
     setIsShareDialogOpen(true);
   };
+
   const handleCloseShareDialog = () => {
     setIsShareDialogOpen(false);
     setShareEmail("");
     setShareMessage("");
     setIsSending(false);
   };
+
   useEffect(() => {
     const initialize = async () => {
       try {
-        const {
-          data: {
-            user
-          }
-        } = await supabase.auth.getUser();
+        const { data: { user } } = await supabase.auth.getUser();
         if (!user) {
           navigate('/auth');
           return;
         }
+
         const editInvoiceData = localStorage.getItem('editInvoiceData');
         if (editInvoiceData) {
           const invoiceData = JSON.parse(editInvoiceData);
           console.log('Loading existing invoice data:', invoiceData);
+          
           setExistingInvoiceId(invoiceData.id);
           setSelectedCustomer(invoiceData.customer_id);
           setInvoiceNumber(invoiceData.invoice_number);
@@ -155,17 +204,18 @@ export default function NewInvoice() {
           await refreshInvoiceData(invoiceData.id);
 
           // Fetch latest activities
-          const {
-            data: activitiesData,
-            error: activitiesError
-          } = await supabase.from('invoice_activities').select('*').eq('invoice_id', invoiceData.id).order('created_at', {
-            ascending: false
-          });
+          const { data: activitiesData, error: activitiesError } = await supabase
+            .from('invoice_activities')
+            .select('*')
+            .eq('invoice_id', invoiceData.id)
+            .order('created_at', { ascending: false });
+
           if (activitiesError) {
             console.error('Error fetching activities:', activitiesError);
           } else {
             setActivities(activitiesData || []);
           }
+          
           localStorage.removeItem('editInvoiceData');
         } else {
           await generateInvoiceNumber();
@@ -173,60 +223,64 @@ export default function NewInvoice() {
             id: "1",
             activity_type: "Created",
             description: "Invoice created",
-            created_at: new Date().toISOString()
+            created_at: new Date().toISOString(),
           }]);
         }
+
         await fetchCustomers(user.id);
       } catch (error) {
         console.error('Initialization error:', error);
         toast({
           title: "Error",
           description: "Failed to initialize invoice",
-          variant: "destructive"
+          variant: "destructive",
         });
       }
     };
+
     initialize();
   }, []);
+
   const removeItem = (index: number) => {
     if (invoiceStatus === 'paid') {
       toast({
         title: "Cannot modify paid invoice",
         description: "Paid invoices cannot be modified",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
+
     const newItems = [...items];
     newItems.splice(index, 1);
     setItems(newItems);
   };
+
   const handleSubmit = async () => {
     if (!selectedCustomer) {
       toast({
         title: "Error",
         description: "Please select a customer",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
+
     setIsLoading(true);
     try {
-      const {
-        data: {
-          user
-        }
-      } = await supabase.auth.getUser();
+      const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
-      const {
-        data: businessProfile
-      } = await supabase.from('business_profiles').select('id').eq('user_id', user.id).single();
+
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', user.id)
+        .single();
+
       if (!businessProfile) throw new Error("Business profile not found");
-      const {
-        subtotal,
-        tax,
-        total
-      } = calculateTotals();
+
+      const { subtotal, tax, total } = calculateTotals();
+
       const invoiceData = {
         business_id: businessProfile.id,
         customer_id: selectedCustomer,
@@ -243,22 +297,28 @@ export default function NewInvoice() {
         is_tax_inclusive: isTaxInclusive,
         status: invoiceStatus
       };
+
       let invoiceId: string;
+
       if (existingInvoiceId) {
-        const {
-          error: updateError
-        } = await supabase.from('invoices').update(invoiceData).eq('id', existingInvoiceId);
+        const { error: updateError } = await supabase
+          .from('invoices')
+          .update(invoiceData)
+          .eq('id', existingInvoiceId);
+
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
-
+        
         // After update, refresh the invoice data
         await refreshInvoiceData(invoiceId);
       } else {
         // Create new invoice
-        const {
-          data: newInvoice,
-          error: invoiceError
-        } = await supabase.from('invoices').insert([invoiceData]).select().single();
+        const { data: newInvoice, error: invoiceError } = await supabase
+          .from('invoices')
+          .insert([invoiceData])
+          .select()
+          .single();
+
         if (invoiceError) throw invoiceError;
         if (!newInvoice) throw new Error("Failed to create invoice");
         invoiceId = newInvoice.id;
@@ -279,10 +339,12 @@ export default function NewInvoice() {
           job: item.job || '',
           tax_code: item.tax_code || 'GST'
         }));
+
         console.log('Inserting new items:', newItems);
-        const {
-          error: itemsError
-        } = await supabase.from('invoice_items').insert(newItems);
+        const { error: itemsError } = await supabase
+          .from('invoice_items')
+          .insert(newItems);
+
         if (itemsError) {
           console.error('Error inserting items:', itemsError);
           throw new Error('Failed to insert invoice items');
@@ -290,50 +352,60 @@ export default function NewInvoice() {
       }
 
       // Add activity log entry
-      const {
-        error: activityError
-      } = await supabase.from('invoice_activities').insert([{
-        invoice_id: invoiceId,
-        activity_type: existingInvoiceId ? 'update' : 'create',
-        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
-        performed_by: user.id
-      }]);
+      const { error: activityError } = await supabase
+        .from('invoice_activities')
+        .insert([{
+          invoice_id: invoiceId,
+          activity_type: existingInvoiceId ? 'update' : 'create',
+          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
+          performed_by: user.id
+        }]);
+
       if (activityError) throw activityError;
 
       // Fetch the latest data after all operations are complete
-      const {
-        data: refreshedData,
-        error: refreshError
-      } = await supabase.from('invoice_items').select('*').eq('invoice_id', invoiceId);
+      const { data: refreshedData, error: refreshError } = await supabase
+        .from('invoice_items')
+        .select('*')
+        .eq('invoice_id', invoiceId);
+
       if (!refreshError && refreshedData) {
         console.log('Refreshed items:', refreshedData);
         setItems(refreshedData);
       }
+
       toast({
         title: "Success",
-        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully"
+        description: existingInvoiceId ? "Invoice updated successfully" : "Invoice created successfully",
       });
+
     } catch (error: any) {
       console.error('Error saving invoice:', error);
       toast({
         title: "Error",
         description: error.message || "Failed to save invoice",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsLoading(false);
     }
   };
+
   const fetchCustomers = async (userId: string) => {
     try {
-      const {
-        data: businessProfile
-      } = await supabase.from('business_profiles').select('id').eq('user_id', userId).single();
+      const { data: businessProfile } = await supabase
+        .from('business_profiles')
+        .select('id')
+        .eq('user_id', userId)
+        .single();
+
       if (!businessProfile) throw new Error('Business profile not found');
-      const {
-        data: customersList,
-        error
-      } = await supabase.from('customers').select('id, company_name, first_name, surname, billing_email').eq('business_id', businessProfile.id);
+
+      const { data: customersList, error } = await supabase
+        .from('customers')
+        .select('id, company_name, first_name, surname, billing_email')
+        .eq('business_id', businessProfile.id);
+
       if (error) throw error;
       setCustomers(customersList || []);
     } catch (error) {
@@ -341,87 +413,99 @@ export default function NewInvoice() {
       throw error;
     }
   };
+
   const generateInvoiceNumber = async () => {
     const newInvoiceNumber = `INV${String(Math.floor(Math.random() * 1000000)).padStart(6, '0')}`;
     setInvoiceNumber(newInvoiceNumber);
   };
+
   const addItem = () => {
     if (invoiceStatus === 'paid') {
       toast({
         title: "Cannot modify paid invoice",
         description: "Paid invoices cannot be modified",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
-    setItems([...items, {
-      description: "",
-      category: "4-1400 Sales",
-      quantity: 1,
-      unit_amount: 0,
-      amount: 0,
-      job: "",
-      tax_code: "GST"
-    }]);
+
+    setItems([
+      ...items,
+      { 
+        description: "", 
+        category: "4-1400 Sales", 
+        quantity: 1,
+        unit_amount: 0,
+        amount: 0, 
+        job: "", 
+        tax_code: "GST" 
+      },
+    ]);
   };
+
   const updateItem = (index: number, field: keyof InvoiceItem, value: any) => {
     if (invoiceStatus === 'paid') {
       toast({
         title: "Cannot modify paid invoice",
         description: "Paid invoices cannot be modified",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
-    const newItems = [...items];
-    newItems[index] = {
-      ...newItems[index],
-      [field]: value
-    };
 
+    const newItems = [...items];
+    newItems[index] = { ...newItems[index], [field]: value };
+    
     // Update amount when quantity or unit_amount changes
     if (field === 'quantity' || field === 'unit_amount') {
       const quantity = field === 'quantity' ? value : newItems[index].quantity;
       const unitAmount = field === 'unit_amount' ? value : newItems[index].unit_amount;
       newItems[index].amount = quantity * unitAmount;
     }
+    
     setItems(newItems);
   };
+
   const calculateTotals = () => {
     const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
-    const tax = isTaxInclusive ? subtotal / 11 : subtotal * 0.1;
-    const total = isTaxInclusive ? subtotal : subtotal + tax;
-    return {
-      subtotal: Number(subtotal.toFixed(2)),
-      tax: Number(tax.toFixed(2)),
+    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
+    const total = isTaxInclusive ? subtotal : (subtotal + tax);
+    return { 
+      subtotal: Number(subtotal.toFixed(2)), 
+      tax: Number(tax.toFixed(2)), 
       total: Number(total.toFixed(2)),
       amountPaid: Number(amountPaid.toFixed(2)),
       balanceDue: Number(balanceDue.toFixed(2))
     };
   };
+
   const totals = calculateTotals();
+
   const handleShareInvoice = async () => {
     if (!existingInvoiceId) {
       toast({
         title: "Error",
         description: "Please save the invoice first",
-        variant: "destructive"
+        variant: "destructive",
       });
       return;
     }
+
     setIsSending(true);
     try {
       const response = await supabase.functions.invoke('send-invoice', {
         body: {
           invoiceId: existingInvoiceId,
           recipientEmail: shareEmail,
-          message: shareMessage
-        }
+          message: shareMessage,
+        },
       });
+
       if (response.error) throw new Error(response.error.message);
+
       toast({
         title: "Success",
-        description: "Invoice sent successfully"
+        description: "Invoice sent successfully",
       });
       handleCloseShareDialog();
     } catch (error: any) {
@@ -429,30 +513,39 @@ export default function NewInvoice() {
       toast({
         title: "Error",
         description: error.message || "Failed to share invoice",
-        variant: "destructive"
+        variant: "destructive",
       });
     } finally {
       setIsSending(false);
     }
   };
-  return <div className="max-w-5xl mx-auto p-6">
+
+  return (
+    <div className="max-w-5xl mx-auto p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center space-x-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard/invoices")}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => navigate("/dashboard/invoices")}
+          >
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
             <h1 className="text-2xl font-semibold">
               Invoice {invoiceNumber}
             </h1>
-            <div className={`text-sm ${invoiceStatus === 'paid' ? 'text-green-600' : 'text-muted-foreground'}`}>
+            <div className={`text-sm ${
+              invoiceStatus === 'paid' ? 'text-green-600' : 'text-muted-foreground'
+            }`}>
               {invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1)}
             </div>
           </div>
         </div>
         
         <div className="flex items-center space-x-2">
-          {existingInvoiceId && <>
+          {existingInvoiceId && (
+            <>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline">
@@ -479,15 +572,19 @@ export default function NewInvoice() {
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="outline" onClick={() => {
-            toast({
-              title: "Coming Soon",
-              description: "Record payment functionality will be added soon"
-            });
-          }}>
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  toast({
+                    title: "Coming Soon",
+                    description: "Record payment functionality will be added soon",
+                  });
+                }}
+              >
                 Record Payment
               </Button>
-            </>}
+            </>
+          )}
           <Button onClick={handleSubmit} disabled={isLoading}>
             <Save className="mr-2 h-4 w-4" />
             Save
@@ -506,33 +603,50 @@ export default function NewInvoice() {
                     <SelectValue placeholder="Select a customer" />
                   </SelectTrigger>
                   <SelectContent>
-                    {customers.map(customer => <SelectItem key={customer.id} value={customer.id}>
+                    {customers.map((customer) => (
+                      <SelectItem key={customer.id} value={customer.id}>
                         {customer.company_name || `${customer.first_name} ${customer.surname}`}
-                      </SelectItem>)}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Issue Date *</Label>
-                <Input type="date" value={issueDate} onChange={e => setIssueDate(e.target.value)} />
+                <Input 
+                  type="date" 
+                  value={issueDate} 
+                  onChange={(e) => setIssueDate(e.target.value)} 
+                />
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
                 <Label>Due Date *</Label>
-                <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                <Input 
+                  type="date" 
+                  value={dueDate} 
+                  onChange={(e) => setDueDate(e.target.value)} 
+                />
               </div>
               <div>
                 <Label>Customer PO Number</Label>
-                <Input value={customerPO} onChange={e => setCustomerPO(e.target.value)} />
+                <Input 
+                  value={customerPO} 
+                  onChange={(e) => setCustomerPO(e.target.value)} 
+                />
               </div>
             </div>
           </div>
 
           <div>
             <Label className="mb-2 inline-block">Amounts are</Label>
-            <RadioGroup value={isTaxInclusive ? "inclusive" : "exclusive"} onValueChange={value => setIsTaxInclusive(value === "inclusive")} className="flex items-center space-x-4">
+            <RadioGroup
+              value={isTaxInclusive ? "inclusive" : "exclusive"}
+              onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
+              className="flex items-center space-x-4"
+            >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="inclusive" id="inclusive" />
                 <Label htmlFor="inclusive">Tax inclusive</Label>
@@ -559,12 +673,21 @@ export default function NewInvoice() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((item, index) => <tr key={index} className="border-t">
+                {items.map((item, index) => (
+                  <tr key={index} className="border-t">
                     <td className="py-2">
-                      <Input value={item.description} onChange={e => updateItem(index, "description", e.target.value)} disabled={invoiceStatus === 'paid'} />
+                      <Input
+                        value={item.description}
+                        onChange={(e) => updateItem(index, "description", e.target.value)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
                     </td>
                     <td className="py-2">
-                      <Select value={item.category} onValueChange={value => updateItem(index, "category", value)} disabled={invoiceStatus === 'paid'}>
+                      <Select
+                        value={item.category}
+                        onValueChange={(value) => updateItem(index, "category", value)}
+                        disabled={invoiceStatus === 'paid'}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -574,19 +697,44 @@ export default function NewInvoice() {
                       </Select>
                     </td>
                     <td className="py-2">
-                      <Input type="number" min="1" value={item.quantity} onChange={e => updateItem(index, "quantity", parseInt(e.target.value) || 0)} disabled={invoiceStatus === 'paid'} />
+                      <Input
+                        type="number"
+                        min="1"
+                        value={item.quantity}
+                        onChange={(e) => updateItem(index, "quantity", parseInt(e.target.value) || 0)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
                     </td>
                     <td className="py-2">
-                      <Input type="number" step="0.01" value={item.unit_amount} onChange={e => updateItem(index, "unit_amount", parseFloat(e.target.value) || 0)} disabled={invoiceStatus === 'paid'} />
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={item.unit_amount}
+                        onChange={(e) => updateItem(index, "unit_amount", parseFloat(e.target.value) || 0)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
                     </td>
                     <td className="py-2">
-                      <Input type="number" value={item.amount} readOnly disabled />
+                      <Input
+                        type="number"
+                        value={item.amount}
+                        readOnly
+                        disabled
+                      />
                     </td>
                     <td className="py-2">
-                      <Input value={item.job} onChange={e => updateItem(index, "job", e.target.value)} disabled={invoiceStatus === 'paid'} />
+                      <Input
+                        value={item.job}
+                        onChange={(e) => updateItem(index, "job", e.target.value)}
+                        disabled={invoiceStatus === 'paid'}
+                      />
                     </td>
                     <td className="py-2">
-                      <Select value={item.tax_code} onValueChange={value => updateItem(index, "tax_code", value)} disabled={invoiceStatus === 'paid'}>
+                      <Select
+                        value={item.tax_code}
+                        onValueChange={(value) => updateItem(index, "tax_code", value)}
+                        disabled={invoiceStatus === 'paid'}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
@@ -597,14 +745,24 @@ export default function NewInvoice() {
                       </Select>
                     </td>
                     <td className="py-2">
-                      <Button variant="ghost" size="icon" onClick={() => removeItem(index)} disabled={invoiceStatus === 'paid'}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeItem(index)}
+                        disabled={invoiceStatus === 'paid'}
+                      >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     </td>
-                  </tr>)}
+                  </tr>
+                ))}
               </tbody>
             </table>
-            <Button variant="outline" onClick={addItem} disabled={invoiceStatus === 'paid'}>
+            <Button 
+              variant="outline" 
+              onClick={addItem}
+              disabled={invoiceStatus === 'paid'}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add line item
             </Button>
@@ -612,7 +770,12 @@ export default function NewInvoice() {
 
           <div>
             <Label>Notes to customer</Label>
-            <Input value={notes} onChange={e => setNotes(e.target.value)} className="h-24" disabled={invoiceStatus === 'paid'} />
+            <Input
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="h-24"
+              disabled={invoiceStatus === 'paid'}
+            />
             <div className="flex items-center mt-2">
               <Checkbox id="saveDefault" disabled={invoiceStatus === 'paid'} />
               <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
@@ -646,10 +809,43 @@ export default function NewInvoice() {
         </div>
 
         <div className="lg:col-span-1">
-          <Collapsible open={isActivityLogOpen} onOpenChange={setIsActivityLogOpen} className="bg-white rounded-lg shadow">
-            
+          <Collapsible
+            open={isActivityLogOpen}
+            onOpenChange={setIsActivityLogOpen}
+            className="bg-white rounded-lg shadow"
+          >
+            <div className="p-4 flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Activity Log</h3>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-9 p-0">
+                  {isActivityLogOpen ? (
+                    <ChevronDown className="h-4 w-4" />
+                  ) : (
+                    <ChevronRight className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
             <CollapsibleContent>
-              
+              <div className="px-4 pb-4">
+                <ScrollArea className="h-[400px]">
+                  <div className="space-y-4">
+                    {activities.map((activity) => (
+                      <div key={activity.id} className="border-b pb-4">
+                        <div className="text-sm font-medium">
+                          {activity.activity_type}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {activity.description}
+                        </div>
+                        <div className="text-xs text-gray-400 mt-1">
+                          {format(new Date(activity.created_at), 'dd/MM/yyyy h:mm a')}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              </div>
             </CollapsibleContent>
           </Collapsible>
         </div>
@@ -660,14 +856,25 @@ export default function NewInvoice() {
         <div className="bg-white rounded-lg shadow">
           <div className="p-4 flex items-center justify-between">
             <h3 className="text-lg font-semibold">Activity Log</h3>
-            <Button variant="ghost" size="sm" onClick={() => setIsActivityLogOpen(!isActivityLogOpen)} className="w-9 p-0">
-              {isActivityLogOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsActivityLogOpen(!isActivityLogOpen)}
+              className="w-9 p-0"
+            >
+              {isActivityLogOpen ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
             </Button>
           </div>
-          {isActivityLogOpen && <div className="px-4 pb-4">
+          {isActivityLogOpen && (
+            <div className="px-4 pb-4">
               <ScrollArea className="h-[200px]">
                 <div className="space-y-4">
-                  {activities.map(activity => <div key={activity.id} className="border-b pb-4">
+                  {activities.map((activity) => (
+                    <div key={activity.id} className="border-b pb-4">
                       <div className="text-sm font-medium">
                         {activity.activity_type}
                       </div>
@@ -677,17 +884,22 @@ export default function NewInvoice() {
                       <div className="text-xs text-gray-400 mt-1">
                         {format(new Date(activity.created_at), 'dd/MM/yyyy h:mm a')}
                       </div>
-                    </div>)}
+                    </div>
+                  ))}
                 </div>
               </ScrollArea>
-            </div>}
+            </div>
+          )}
         </div>
       </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={open => {
-      if (!open) handleCloseShareDialog();
-    }}>
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={e => e.preventDefault()}>
+      <Dialog 
+        open={isShareDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) handleCloseShareDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
             <DialogDescription>
@@ -697,11 +909,20 @@ export default function NewInvoice() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Recipient Email</Label>
-              <Input type="email" placeholder="Enter email address" value={shareEmail} onChange={e => setShareEmail(e.target.value)} />
+              <Input
+                type="email"
+                placeholder="Enter email address"
+                value={shareEmail}
+                onChange={(e) => setShareEmail(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>Message (optional)</Label>
-              <Textarea placeholder="Add a message to your invoice" value={shareMessage} onChange={e => setShareMessage(e.target.value)} />
+              <Textarea
+                placeholder="Add a message to your invoice"
+                value={shareMessage}
+                onChange={(e) => setShareMessage(e.target.value)}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -714,5 +935,6 @@ export default function NewInvoice() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>;
+    </div>
+  );
 }
