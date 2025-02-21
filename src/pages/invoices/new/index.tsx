@@ -290,6 +290,7 @@ export default function NewInvoice() {
       let invoiceId: string;
 
       if (existingInvoiceId) {
+        // Update existing invoice
         const { error: updateError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -297,9 +298,15 @@ export default function NewInvoice() {
 
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
-        
-        // After update, refresh the invoice data
-        await refreshInvoiceData(invoiceId);
+
+        // Delete all existing items first
+        const { error: deleteError } = await supabase
+          .from('invoice_items')
+          .delete()
+          .eq('invoice_id', invoiceId);
+
+        if (deleteError) throw deleteError;
+
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -313,10 +320,7 @@ export default function NewInvoice() {
         invoiceId = newInvoice.id;
       }
 
-      // Wait a brief moment to ensure deletion is complete
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Now insert the current items
+      // Insert the current items
       if (items.length > 0) {
         const newItems = items.map(item => ({
           invoice_id: invoiceId,
@@ -328,15 +332,11 @@ export default function NewInvoice() {
           tax_code: item.tax_code || 'GST'
         }));
 
-        console.log('Inserting new items:', newItems);
         const { error: itemsError } = await supabase
           .from('invoice_items')
           .insert(newItems);
 
-        if (itemsError) {
-          console.error('Error inserting items:', itemsError);
-          throw new Error('Failed to insert invoice items');
-        }
+        if (itemsError) throw itemsError;
       }
 
       // Add activity log entry
@@ -351,16 +351,8 @@ export default function NewInvoice() {
 
       if (activityError) throw activityError;
 
-      // Fetch the latest data after all operations are complete
-      const { data: refreshedData, error: refreshError } = await supabase
-        .from('invoice_items')
-        .select('*')
-        .eq('invoice_id', invoiceId);
-
-      if (!refreshError && refreshedData) {
-        console.log('Refreshed items:', refreshedData);
-        setItems(refreshedData);
-      }
+      // Refresh invoice data after all operations
+      await refreshInvoiceData(invoiceId);
 
       toast({
         title: "Success",
