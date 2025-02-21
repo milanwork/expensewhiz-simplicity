@@ -1,4 +1,3 @@
-<lov-code>
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
@@ -1021,4 +1020,4 @@ export default function NewInvoice() {
             <div className="space-y-2">
               <Label>Message (optional)</Label>
               <Textarea
-                placeholder="Add
+                placeholder="Add a message to
