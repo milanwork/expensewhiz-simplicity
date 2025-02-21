@@ -565,211 +565,210 @@ export default function NewInvoice() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-        <div className="lg:col-span-3 space-y-8">
-          <div className="grid grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <div>
-                <Label>Customer *</Label>
-                <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((customer) => (
-                      <SelectItem key={customer.id} value={customer.id}>
-                        {customer.company_name || `${customer.first_name} ${customer.surname}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label>Issue Date *</Label>
-                <Input 
-                  type="date" 
-                  value={issueDate} 
-                  onChange={(e) => setIssueDate(e.target.value)} 
-                />
-              </div>
+      <div className="space-y-8">
+        <div className="grid grid-cols-2 gap-8">
+          <div className="space-y-4">
+            <div>
+              <Label>Customer *</Label>
+              <Select value={selectedCustomer} onValueChange={setSelectedCustomer}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a customer" />
+                </SelectTrigger>
+                <SelectContent>
+                  {customers.map((customer) => (
+                    <SelectItem key={customer.id} value={customer.id}>
+                      {customer.company_name || `${customer.first_name} ${customer.surname}`}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <Label>Due Date *</Label>
-                <Input 
-                  type="date" 
-                  value={dueDate} 
-                  onChange={(e) => setDueDate(e.target.value)} 
-                />
-              </div>
-              <div>
-                <Label>Customer PO Number</Label>
-                <Input 
-                  value={customerPO} 
-                  onChange={(e) => setCustomerPO(e.target.value)} 
-                />
-              </div>
+            <div>
+              <Label>Issue Date *</Label>
+              <Input 
+                type="date" 
+                value={issueDate} 
+                onChange={(e) => setIssueDate(e.target.value)} 
+              />
             </div>
-          </div>
-
-          <div>
-            <Label className="mb-2 inline-block">Amounts are</Label>
-            <RadioGroup
-              value={isTaxInclusive ? "inclusive" : "exclusive"}
-              onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
-              className="flex items-center space-x-4"
-            >
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="inclusive" id="inclusive" />
-                <Label htmlFor="inclusive">Tax inclusive</Label>
-              </div>
-              <div className="flex items-center space-x-2">
-                <RadioGroupItem value="exclusive" id="exclusive" />
-                <Label htmlFor="exclusive">Tax exclusive</Label>
-              </div>
-            </RadioGroup>
           </div>
 
           <div className="space-y-4">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left">
-                  <th className="pb-2">Description</th>
-                  <th className="pb-2">Category *</th>
-                  <th className="pb-2 w-24">Quantity *</th>
-                  <th className="pb-2 w-32">Unit Amount ($) *</th>
-                  <th className="pb-2 w-32">Amount ($)</th>
-                  <th className="pb-2">Job</th>
-                  <th className="pb-2">Tax code *</th>
-                  <th className="pb-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item, index) => (
-                  <tr key={index} className="border-t">
-                    <td className="py-2">
-                      <Input
-                        value={item.description}
-                        onChange={(e) => updateItem(index, "description", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Select
-                        value={item.category}
-                        onValueChange={(value) => updateItem(index, "category", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="4-1400 Sales">4-1400 Sales</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        type="number"
-                        min="1"
-                        value={item.quantity}
-                        onChange={(e) => updateItem(index, "quantity", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        value={item.unit_amount}
-                        onChange={(e) => updateItem(index, "unit_amount", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        type="number"
-                        value={item.amount}
-                        readOnly
-                        disabled
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Input
-                        value={item.job}
-                        onChange={(e) => updateItem(index, "job", e.target.value)}
-                      />
-                    </td>
-                    <td className="py-2">
-                      <Select
-                        value={item.tax_code}
-                        onValueChange={(value) => updateItem(index, "tax_code", value)}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="GST">GST</SelectItem>
-                          <SelectItem value="NO_GST">No GST</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </td>
-                    <td className="py-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeItem(index)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <Button variant="outline" onClick={addItem}>
-              <Plus className="mr-2 h-4 w-4" />
-              Add line item
-            </Button>
-          </div>
-
-          <div>
-            <Label>Notes to customer</Label>
-            <Input
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              className="h-24"
-            />
-            <div className="flex items-center mt-2">
-              <Checkbox id="saveDefault" />
-              <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
+            <div>
+              <Label>Due Date *</Label>
+              <Input 
+                type="date" 
+                value={dueDate} 
+                onChange={(e) => setDueDate(e.target.value)} 
+              />
             </div>
-          </div>
-
-          <div className="flex justify-end">
-            <div className="w-64 space-y-2">
-              <div className="flex justify-between py-1">
-                <span>Subtotal</span>
-                <span>${totals.subtotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span>Tax</span>
-                <span>${totals.tax.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-1 font-semibold">
-                <span>Total</span>
-                <span>${totals.total.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-1">
-                <span>Amount paid</span>
-                <span>${amountPaid.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between py-1 font-semibold">
-                <span>Balance due</span>
-                <span>${balanceDue.toFixed(2)}</span>
-              </div>
+            <div>
+              <Label>Customer PO Number</Label>
+              <Input 
+                value={customerPO} 
+                onChange={(e) => setCustomerPO(e.target.value)} 
+              />
             </div>
           </div>
         </div>
 
-        <div className="lg:col-span-1">
+        <div>
+          <Label className="mb-2 inline-block">Amounts are</Label>
+          <RadioGroup
+            value={isTaxInclusive ? "inclusive" : "exclusive"}
+            onValueChange={(value) => setIsTaxInclusive(value === "inclusive")}
+            className="flex items-center space-x-4"
+          >
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="inclusive" id="inclusive" />
+              <Label htmlFor="inclusive">Tax inclusive</Label>
+            </div>
+            <div className="flex items-center space-x-2">
+              <RadioGroupItem value="exclusive" id="exclusive" />
+              <Label htmlFor="exclusive">Tax exclusive</Label>
+            </div>
+          </RadioGroup>
+        </div>
+
+        <div className="space-y-4">
+          <table className="w-full">
+            <thead>
+              <tr className="text-left">
+                <th className="pb-2 w-1/4">Description</th>
+                <th className="pb-2 w-1/6">Category *</th>
+                <th className="pb-2 w-24">Quantity *</th>
+                <th className="pb-2 w-32">Unit Amount ($) *</th>
+                <th className="pb-2 w-32">Amount ($)</th>
+                <th className="pb-2 w-1/6">Job</th>
+                <th className="pb-2 w-1/6">Tax code *</th>
+                <th className="pb-2 w-16"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, index) => (
+                <tr key={index} className="border-t">
+                  <td className="py-2">
+                    <Input
+                      value={item.description}
+                      onChange={(e) => updateItem(index, "description", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Select
+                      value={item.category}
+                      onValueChange={(value) => updateItem(index, "category", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="4-1400 Sales">4-1400 Sales</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      value={item.quantity}
+                      onChange={(e) => updateItem(index, "quantity", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={item.unit_amount}
+                      onChange={(e) => updateItem(index, "unit_amount", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      type="number"
+                      value={item.amount}
+                      readOnly
+                      disabled
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Input
+                      value={item.job}
+                      onChange={(e) => updateItem(index, "job", e.target.value)}
+                    />
+                  </td>
+                  <td className="py-2">
+                    <Select
+                      value={item.tax_code}
+                      onValueChange={(value) => updateItem(index, "tax_code", value)}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="GST">GST</SelectItem>
+                        <SelectItem value="NO_GST">No GST</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="py-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => removeItem(index)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <Button variant="outline" onClick={addItem}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add line item
+          </Button>
+        </div>
+
+        <div>
+          <Label>Notes to customer</Label>
+          <Input
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            className="h-24"
+          />
+          <div className="flex items-center mt-2">
+            <Checkbox id="saveDefault" />
+            <Label htmlFor="saveDefault" className="ml-2">Save as default</Label>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <div className="w-64 space-y-2">
+            <div className="flex justify-between py-1">
+              <span>Subtotal</span>
+              <span>${totals.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span>Tax</span>
+              <span>${totals.tax.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between py-1 font-semibold">
+              <span>Total</span>
+              <span>${totals.total.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between py-1">
+              <span>Amount paid</span>
+              <span>${amountPaid.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between py-1 font-semibold">
+              <span>Balance due</span>
+              <span>${balanceDue.toFixed(2)}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Log moved to bottom */}
+        <div className="border-t pt-8">
           <Collapsible
             open={isActivityLogOpen}
             onOpenChange={setIsActivityLogOpen}
@@ -789,7 +788,7 @@ export default function NewInvoice() {
             </div>
             <CollapsibleContent>
               <div className="px-4 pb-4">
-                <ScrollArea className="h-[400px]">
+                <ScrollArea className="h-[200px]">
                   <div className="space-y-4">
                     {activities.map((activity) => (
                       <div key={activity.id} className="border-b pb-4">
