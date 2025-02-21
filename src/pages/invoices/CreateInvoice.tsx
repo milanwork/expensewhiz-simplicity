@@ -171,7 +171,7 @@ export default function CreateInvoice() {
 
       if (!businessProfile) throw new Error("Business profile not found");
 
-      const { subtotal, tax, total } = calculateTotals();
+      const { subtotal, tax, total, balanceDue } = calculateTotals();
 
       const { data: invoice, error: invoiceError } = await supabase
         .from('invoices')
@@ -187,7 +187,7 @@ export default function CreateInvoice() {
           tax,
           total,
           amount_paid: 0,
-          balance_due: total,
+          balance_due: balanceDue, // Use calculated balanceDue
           is_tax_inclusive: isTaxInclusive,
           status: 'draft'
         }])
