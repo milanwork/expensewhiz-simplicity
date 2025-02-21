@@ -75,7 +75,6 @@ interface InvoiceItem {
   quantity: number;
   unit_amount: number;
   amount: number;
-  job: string;
   tax_code: string;
 }
 
@@ -117,7 +116,6 @@ export default function NewInvoice() {
       quantity: 1,
       unit_amount: 0,
       amount: 0,
-      job: "", 
       tax_code: "GST" 
     },
   ]);
@@ -327,7 +325,6 @@ export default function NewInvoice() {
           quantity: Number(item.quantity) || 1,
           unit_amount: Number(item.unit_amount) || 0,
           amount: Number(item.amount) || 0,
-          job: item.job || '',
           tax_code: item.tax_code || 'GST'
         }));
 
@@ -419,7 +416,6 @@ export default function NewInvoice() {
         quantity: 1,
         unit_amount: 0,
         amount: 0,
-        job: "", 
         tax_code: "GST" 
       },
     ]);
@@ -634,12 +630,11 @@ export default function NewInvoice() {
           <table className="w-full">
             <thead>
               <tr className="text-left">
-                <th className="pb-2 w-1/4">Description</th>
+                <th className="pb-2 w-1/3">Description</th>
                 <th className="pb-2 w-1/6">Category *</th>
                 <th className="pb-2 w-24">Quantity *</th>
                 <th className="pb-2 w-32">Unit Amount ($) *</th>
                 <th className="pb-2 w-32">Amount ($)</th>
-                <th className="pb-2 w-1/6">Job</th>
                 <th className="pb-2 w-1/6">Tax code *</th>
                 <th className="pb-2 w-16"></th>
               </tr>
@@ -688,12 +683,6 @@ export default function NewInvoice() {
                       value={item.amount}
                       readOnly
                       disabled
-                    />
-                  </td>
-                  <td className="py-2">
-                    <Input
-                      value={item.job}
-                      onChange={(e) => updateItem(index, "job", e.target.value)}
                     />
                   </td>
                   <td className="py-2">
@@ -817,7 +806,10 @@ export default function NewInvoice() {
           if (!open) handleCloseShareDialog();
         }}
       >
-        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
+        <DialogContent 
+          className="sm:max-w-md"
+          onPointerDownOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
             <DialogDescription>
