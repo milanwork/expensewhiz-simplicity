@@ -123,6 +123,29 @@ export default function NewInvoice() {
   const [shareMessage, setShareMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
 
+  const refreshInvoiceData = async (invoiceId: string) => {
+    const { data: invoice, error } = await supabase
+      .from('invoices')
+      .select(`
+        *,
+        items:invoice_items(*)
+      `)
+      .eq('id', invoiceId)
+      .single();
+
+    if (error) {
+      console.error('Error fetching invoice:', error);
+      return;
+    }
+
+    console.log('Refreshed invoice data:', invoice);
+    
+    setInvoiceStatus(invoice.status);
+    setAmountPaid(invoice.amount_paid || 0);
+    setBalanceDue(invoice.balance_due || 0);
+    setItems(invoice.items || []);
+  };
+
   const handleOpenShareDialog = () => {
     if (selectedCustomer) {
       const customer = customers.find(c => c.id === selectedCustomer);
@@ -166,7 +189,10 @@ export default function NewInvoice() {
           setAmountPaid(invoiceData.amount_paid || 0);
           setBalanceDue(invoiceData.balance_due || 0);
 
-          // Fetch latest activities for this invoice
+          // Immediately refresh invoice data to get latest status
+          await refreshInvoiceData(invoiceData.id);
+
+          // Fetch latest activities
           const { data: activitiesData, error: activitiesError } = await supabase
             .from('invoice_activities')
             .select('*')
@@ -175,11 +201,9 @@ export default function NewInvoice() {
 
           if (activitiesError) {
             console.error('Error fetching activities:', activitiesError);
-            throw activitiesError;
+          } else {
+            setActivities(activitiesData || []);
           }
-
-          console.log('Fetched activities:', activitiesData);
-          setActivities(activitiesData || []);
           
           localStorage.removeItem('editInvoiceData');
         } else {
@@ -251,13 +275,12 @@ export default function NewInvoice() {
         amount_paid: amountPaid,
         balance_due: balanceDue,
         is_tax_inclusive: isTaxInclusive,
-        status: 'draft' as const
+        status: invoiceStatus
       };
 
       let invoiceId: string;
 
       if (existingInvoiceId) {
-        // First, update the invoice
         const { error: updateError } = await supabase
           .from('invoices')
           .update(invoiceData)
@@ -265,18 +288,9 @@ export default function NewInvoice() {
 
         if (updateError) throw updateError;
         invoiceId = existingInvoiceId;
-
-        // Then, delete ALL existing items
-        console.log('Deleting existing items for invoice:', invoiceId);
-        const { error: deleteError } = await supabase
-          .from('invoice_items')
-          .delete()
-          .eq('invoice_id', invoiceId);
-
-        if (deleteError) {
-          console.error('Error deleting items:', deleteError);
-          throw new Error('Failed to delete existing items');
-        }
+        
+        // After update, refresh the invoice data
+        await refreshInvoiceData(invoiceId);
       } else {
         // Create new invoice
         const { data: newInvoice, error: invoiceError } = await supabase
@@ -465,13 +479,11 @@ export default function NewInvoice() {
             <h1 className="text-2xl font-semibold">
               Invoice {invoiceNumber}
             </h1>
-            {existingInvoiceId && (
-              <div className={`text-sm ${
-                invoiceStatus === 'paid' ? 'text-green-600' : 'text-muted-foreground'
-              }`}>
-                {invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1)}
-              </div>
-            )}
+            <div className={`text-sm ${
+              invoiceStatus === 'paid' ? 'text-green-600' : 'text-muted-foreground'
+            }`}>
+              {invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1)}
+            </div>
           </div>
         </div>
         
