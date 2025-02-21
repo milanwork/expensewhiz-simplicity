@@ -115,6 +115,9 @@ export default function NewInvoice() {
   const [isLoading, setIsLoading] = useState(false);
   const [isActivityLogOpen, setIsActivityLogOpen] = useState(true);
   const [activities, setActivities] = useState<Activity[]>([]);
+  const [invoiceStatus, setInvoiceStatus] = useState<'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'>('draft');
+  const [amountPaid, setAmountPaid] = useState(0);
+  const [balanceDue, setBalanceDue] = useState(0);
   const [isShareDialogOpen, setIsShareDialogOpen] = useState(false);
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
@@ -159,8 +162,11 @@ export default function NewInvoice() {
           setIsTaxInclusive(invoiceData.is_tax_inclusive);
           setItems(invoiceData.items || []);
           setNotes(invoiceData.notes || '');
+          setInvoiceStatus(invoiceData.status);
+          setAmountPaid(invoiceData.amount_paid || 0);
+          setBalanceDue(invoiceData.balance_due || 0);
 
-          // Fetch activities for this invoice
+          // Fetch latest activities for this invoice
           const { data: activitiesData, error: activitiesError } = await supabase
             .from('invoice_activities')
             .select('*')
@@ -169,9 +175,11 @@ export default function NewInvoice() {
 
           if (activitiesError) {
             console.error('Error fetching activities:', activitiesError);
-          } else {
-            setActivities(activitiesData || []);
+            throw activitiesError;
           }
+
+          console.log('Fetched activities:', activitiesData);
+          setActivities(activitiesData || []);
           
           localStorage.removeItem('editInvoiceData');
         } else {
@@ -240,8 +248,8 @@ export default function NewInvoice() {
         subtotal,
         tax,
         total,
-        amount_paid: 0,
-        balance_due: total,
+        amount_paid: amountPaid,
+        balance_due: balanceDue,
         is_tax_inclusive: isTaxInclusive,
         status: 'draft' as const
       };
@@ -396,8 +404,8 @@ export default function NewInvoice() {
       subtotal: Number(subtotal.toFixed(2)), 
       tax: Number(tax.toFixed(2)), 
       total: Number(total.toFixed(2)),
-      amountPaid: 0,
-      balanceDue: Number(total.toFixed(2))
+      amountPaid: Number(amountPaid.toFixed(2)),
+      balanceDue: Number(balanceDue.toFixed(2))
     };
   };
 
@@ -459,9 +467,9 @@ export default function NewInvoice() {
             </h1>
             {existingInvoiceId && (
               <div className={`text-sm ${
-                calculateTotals().balanceDue === 0 ? 'text-green-600' : 'text-muted-foreground'
+                invoiceStatus === 'paid' ? 'text-green-600' : 'text-muted-foreground'
               }`}>
-                {calculateTotals().balanceDue === 0 ? 'Paid' : 'Draft'}
+                {invoiceStatus.charAt(0).toUpperCase() + invoiceStatus.slice(1)}
               </div>
             )}
           </div>
@@ -691,11 +699,11 @@ export default function NewInvoice() {
               </div>
               <div className="flex justify-between py-1">
                 <span>Amount paid</span>
-                <span>${totals.amountPaid.toFixed(2)}</span>
+                <span>${amountPaid.toFixed(2)}</span>
               </div>
               <div className="flex justify-between py-1 font-semibold">
                 <span>Balance due</span>
-                <span>${totals.balanceDue.toFixed(2)}</span>
+                <span>${balanceDue.toFixed(2)}</span>
               </div>
             </div>
           </div>
