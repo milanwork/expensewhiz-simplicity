@@ -51,6 +51,16 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { format } from "date-fns";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface Customer {
   id: string;
@@ -130,6 +140,8 @@ export default function NewInvoice() {
   const [shareEmail, setShareEmail] = useState("");
   const [shareMessage, setShareMessage] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [showStatusChangeDialog, setShowStatusChangeDialog] = useState(false);
+  const [pendingInvoiceChanges, setPendingInvoiceChanges] = useState<any>(null);
 
   const refreshInvoiceData = async (invoiceId: string) => {
     console.log('Refreshing invoice data for ID:', invoiceId);
@@ -265,6 +277,25 @@ export default function NewInvoice() {
       return;
     }
 
+    const { subtotal, tax, total } = calculateTotals();
+
+    // Check if this is a paid invoice with changes
+    if (existingInvoiceId && invoiceStatus === 'paid' && total !== totals.total) {
+      setPendingInvoiceChanges({
+        ...invoiceData,
+        subtotal,
+        tax,
+        total,
+        status: 'draft' as const
+      });
+      setShowStatusChangeDialog(true);
+      return;
+    }
+
+    await saveInvoice(subtotal, tax, total);
+  };
+
+  const saveInvoice = async (subtotal: number, tax: number, total: number) => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -277,8 +308,6 @@ export default function NewInvoice() {
         .single();
 
       if (!businessProfile) throw new Error("Business profile not found");
-
-      const { subtotal, tax, total } = calculateTotals();
 
       const invoiceData = {
         business_id: businessProfile.id,
@@ -360,15 +389,27 @@ export default function NewInvoice() {
         }
       }
 
-      // Add activity log entry
+      // Add activity log entries
+      const activityEntries = [{
+        invoice_id: invoiceId,
+        activity_type: existingInvoiceId ? 'update' : 'create',
+        description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
+        performed_by: user.id
+      }];
+
+      // Add status change activity if applicable
+      if (existingInvoiceId && invoiceStatus === 'draft' && invoiceData.status === 'draft') {
+        activityEntries.push({
+          invoice_id: invoiceId,
+          activity_type: 'status_change',
+          description: 'Invoice status changed from paid to draft due to modifications',
+          performed_by: user.id
+        });
+      }
+
       const { error: activityError } = await supabase
         .from('invoice_activities')
-        .insert([{
-          invoice_id: invoiceId,
-          activity_type: existingInvoiceId ? 'update' : 'create',
-          description: existingInvoiceId ? 'Invoice updated' : 'Invoice created',
-          performed_by: user.id
-        }]);
+        .insert(activityEntries);
 
       if (activityError) throw activityError;
 
@@ -858,6 +899,38 @@ export default function NewInvoice() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      
+      <AlertDialog open={showStatusChangeDialog} onOpenChange={setShowStatusChangeDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Change Invoice Status</AlertDialogTitle>
+            <AlertDialogDescription>
+              This invoice is currently marked as paid. Making changes will set its status to draft. 
+              Do you want to proceed with these changes?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowStatusChangeDialog(false)}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                setShowStatusChangeDialog(false);
+                if (pendingInvoiceChanges) {
+                  setInvoiceStatus('draft');
+                  await saveInvoice(
+                    pendingInvoiceChanges.subtotal,
+                    pendingInvoiceChanges.tax,
+                    pendingInvoiceChanges.total
+                  );
+                }
+              }}
+            >
+              Continue
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
