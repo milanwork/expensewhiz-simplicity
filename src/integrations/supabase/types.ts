@@ -20,6 +20,7 @@ export type Database = {
           country: string | null
           created_at: string
           id: string
+          pdf_notes_template: string | null
           postcode: string | null
           state: string | null
           updated_at: string
@@ -35,6 +36,7 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          pdf_notes_template?: string | null
           postcode?: string | null
           state?: string | null
           updated_at?: string
@@ -50,6 +52,7 @@ export type Database = {
           country?: string | null
           created_at?: string
           id?: string
+          pdf_notes_template?: string | null
           postcode?: string | null
           state?: string | null
           updated_at?: string

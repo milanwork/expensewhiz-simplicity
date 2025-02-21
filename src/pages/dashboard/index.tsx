@@ -1,4 +1,3 @@
-
 import { useEffect, useState } from "react";
 import { useNavigate, Outlet } from "react-router-dom";
 import { supabase } from "@/lib/supabase";
@@ -85,22 +84,12 @@ const Dashboard = () => {
       subItems: [
         { label: "Estimates", path: "/dashboard/estimates" },
         { label: "Invoices", path: "/dashboard/invoices" },
-        { label: "Payment Setup", path: "/dashboard/payment-setup" },
-        { label: "Products & Services", path: "/dashboard/products" },
       ]
     },
     { icon: ShoppingCart, label: "Purchases", path: "/dashboard/purchases" },
     { icon: Receipt, label: "Receipts", path: "/dashboard/receipts", badge: "NEW" },
     { icon: BarChart3, label: "Report", path: "/dashboard/report" },
-    { 
-      icon: Wallet, 
-      label: "Currency", 
-      subItems: [
-        { label: "Accounting", path: "/dashboard/accounting" },
-        { label: "Banking", path: "/dashboard/banking" },
-        { label: "Payroll", path: "/dashboard/payroll", badge: "SOON" },
-      ]
-    },
+    { icon: Building2, label: "Banking", path: "/dashboard/banking" },
   ];
 
   const bottomMenuItems = [
@@ -217,4 +206,3 @@ const Dashboard = () => {
 };
 
 export default Dashboard;
-

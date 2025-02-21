@@ -160,6 +160,7 @@ export default function NewInvoice() {
     setIsShareDialogOpen(false);
     setShareEmail("");
     setShareMessage("");
+    setIsSending(false);
   };
 
   useEffect(() => {
@@ -451,7 +452,7 @@ export default function NewInvoice() {
         title: "Success",
         description: "Invoice sent successfully",
       });
-      setIsShareDialogOpen(false);
+      handleCloseShareDialog();
     } catch (error: any) {
       console.error('Error sharing invoice:', error);
       toast({
@@ -764,8 +765,13 @@ export default function NewInvoice() {
         </div>
       </div>
 
-      <Dialog open={isShareDialogOpen} onOpenChange={handleCloseShareDialog}>
-        <DialogContent>
+      <Dialog 
+        open={isShareDialogOpen} 
+        onOpenChange={(open) => {
+          if (!open) handleCloseShareDialog();
+        }}
+      >
+        <DialogContent className="sm:max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader>
             <DialogTitle>Share Invoice</DialogTitle>
             <DialogDescription>
