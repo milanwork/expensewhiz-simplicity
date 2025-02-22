@@ -432,7 +432,7 @@ const calculateTotals = () => {
               </div>
               <div className="flex justify-between py-1 font-semibold">
                 <span>Balance due</span>
-                <span>${totals.balanceDue.toFixed(2)}</span>
+                <span>${totals.total.toFixed(2)}</span>
               </div>
             </div>
           </div>
