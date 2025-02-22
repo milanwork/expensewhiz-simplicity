@@ -8,8 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useToast } from "@/hooks/use-toast";
 import {
   Select,
-  SelectContent,
-  SelectItem,
+  SelectContent,ta
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
@@ -51,7 +50,7 @@ export default function Invoices() {
     status: 'all',
     customer: 'all',
     period: 'custom',
-    dateFrom:  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0];  // new Date().toISOString().split('T')[0],
+    dateFrom:  new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0],  // new Date().toISOString().split('T')[0],
     dateTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     search: '',
   });
