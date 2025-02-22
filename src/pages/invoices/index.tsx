@@ -51,7 +51,7 @@ export default function Invoices() {
     status: 'all',
     customer: 'all',
     period: 'custom',
-    dateFrom: new Date().toISOString().split('T')[0],
+    dateFrom: new Date(new Date().setDate(1)).toISOString().split('T')[0],   // new Date().toISOString().split('T')[0],
     dateTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     search: '',
   });
