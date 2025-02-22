@@ -139,13 +139,12 @@ export default function CreateInvoice() {
     const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
     const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
     const total = isTaxInclusive ? subtotal : (subtotal + tax);
-    const balance =  isTaxInclusive ? subtotal : (subtotal + tax);
     return { 
       subtotal: Number(subtotal.toFixed(2)), 
       tax: Number(tax.toFixed(2)), 
       total: Number(total.toFixed(2)),
       amountPaid: 0,
-      balanceDue: Number(balance.toFixed(2))
+      balanceDue: Number(total.toFixed(2))
     };
   };
 
@@ -188,7 +187,7 @@ export default function CreateInvoice() {
           tax,
           total,
           amount_paid: 0,
-          balance_due: balanceDue,
+          balance_due: total,
           is_tax_inclusive: isTaxInclusive,
           status: 'draft'
         }])
