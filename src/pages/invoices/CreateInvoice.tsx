@@ -133,20 +133,29 @@ export default function CreateInvoice() {
     const newItems = [...items];
     newItems[index] = { ...newItems[index], [field]: value };
     setItems(newItems);
-  };
+  }
 
-  const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
-    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
-    const total = isTaxInclusive ? subtotal : (subtotal + tax);
-    return { 
-      subtotal: Number(subtotal.toFixed(2)), 
-      tax: Number(tax.toFixed(2)), 
-      total: Number(total.toFixed(2)),
-      amountPaid: 0,
-      balanceDue: Number(total.toFixed(2))
-    };
+
+const [amountPaid, setAmountPaid] = useState(0); // Amount paid state
+
+const calculateTotals = () => {
+  const subtotal = items.reduce(
+    (sum, item) => sum + (parseFloat(item.amount.toString()) || 0),
+    0
+  );
+  const tax = isTaxInclusive ? subtotal / 11 : subtotal * 0.1;
+  const total = isTaxInclusive ? subtotal : subtotal + tax;
+  const balanceDue = total - amountPaid; // Balance is total minus amount paid
+  
+  return {
+    subtotal: Number(subtotal.toFixed(2)),
+    tax: Number(tax.toFixed(2)),
+    total: Number(total.toFixed(2)),
+    amountPaid: Number(amountPaid.toFixed(2)),  // Display the paid amount
+    balanceDue: Number(balanceDue.toFixed(2)), // Display the calculated balance
   };
+};
+
 
   const handleSubmit = async () => {
     if (!selectedCustomer) {
