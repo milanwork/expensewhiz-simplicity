@@ -188,7 +188,7 @@ export default function CreateInvoice() {
           tax,
           total,
           amount_paid: 0,
-          balance_due: total,
+          balance_due: balanceDue,
           is_tax_inclusive: isTaxInclusive,
           status: 'draft'
         }])
