@@ -145,7 +145,7 @@ const calculateTotals = () => {
   );
   const tax = isTaxInclusive ? subtotal / 11 : subtotal * 0.1;
   const total = isTaxInclusive ? subtotal : subtotal + tax;
-  const balanceDue = total - amountPaid; // Balance is total minus amount paid
+  const balanceDue = = isTaxInclusive ? subtotal : subtotal + tax; //total - amountPaid; // Balance is total minus amount paid
   
   return {
     subtotal: Number(subtotal.toFixed(2)),
