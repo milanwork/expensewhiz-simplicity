@@ -143,6 +143,101 @@ export default function NewInvoice() {
   const [showStatusChangeDialog, setShowStatusChangeDialog] = useState(false);
   const [pendingInvoiceChanges, setPendingInvoiceChanges] = useState<any>(null);
 
+  const calculateTotals = () => {
+    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
+    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
+    const total = isTaxInclusive ? subtotal : (subtotal + tax);
+    const newBalanceDue = total - amountPaid;
+    setBalanceDue(newBalanceDue); // Update the balance due state
+    return { 
+      subtotal: Number(subtotal.toFixed(2)), 
+      tax: Number(tax.toFixed(2)), 
+      total: Number(total.toFixed(2)),
+      amountPaid: Number(amountPaid.toFixed(2)),
+      balanceDue: Number(newBalanceDue.toFixed(2))
+    };
+  };
+
+  useEffect(() => {
+    // Recalculate totals whenever items or amountPaid changes
+    const totals = calculateTotals();
+    setBalanceDue(totals.balanceDue);
+  }, [items, amountPaid, isTaxInclusive]);
+
+  const handleSubmit = async () => {
+    if (!selectedCustomer) {
+      toast({
+        title: "Error",
+        description: "Please select a customer",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const { subtotal, tax, total, balanceDue } = calculateTotals();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("Not authenticated");
+
+    const { data: businessProfile } = await supabase
+      .from('business_profiles')
+      .select('id')
+      .eq('user_id', user.id)
+      .single();
+
+    if (!businessProfile) throw new Error("Business profile not found");
+
+    // Define invoice data before the status check
+    const invoiceData = {
+      business_id: businessProfile.id,
+      customer_id: selectedCustomer,
+      invoice_number: invoiceNumber,
+      customer_po_number: customerPO || null,
+      issue_date: issueDate,
+      due_date: dueDate,
+      notes: notes || null,
+      subtotal,
+      tax,
+      total,
+      amount_paid: amountPaid,
+      balance_due: balanceDue,
+      is_tax_inclusive: isTaxInclusive,
+      status: invoiceStatus
+    };
+
+    // Check conditions for status change
+    if (existingInvoiceId) {
+      // First check: Paid invoice with changes
+      if (invoiceStatus === 'paid') {
+        const { data: currentInvoice } = await supabase
+          .from('invoices')
+          .select('total')
+          .eq('id', existingInvoiceId)
+          .single();
+
+        if (currentInvoice && currentInvoice.total !== total) {
+          setPendingInvoiceChanges({
+            ...invoiceData,
+            status: 'draft'
+          });
+          setShowStatusChangeDialog(true);
+          return;
+        }
+      }
+      
+      // Second check: Balance due greater than zero
+      if (balanceDue > 0 && invoiceStatus !== 'draft') {
+        setPendingInvoiceChanges({
+          ...invoiceData,
+          status: 'open'
+        });
+        setShowStatusChangeDialog(true);
+        return;
+      }
+    }
+
+    await saveInvoice(subtotal, tax, total, balanceDue);
+  };
+
   const refreshInvoiceData = async (invoiceId: string) => {
     console.log('Refreshing invoice data for ID:', invoiceId);
     
@@ -166,7 +261,6 @@ export default function NewInvoice() {
     setAmountPaid(invoice.amount_paid || 0);
     setBalanceDue(invoice.balance_due || 0);
     
-    // Replace the entire items array instead of appending
     if (invoice.items) {
       console.log('Setting items to:', invoice.items);
       setItems(invoice.items);
@@ -174,6 +268,9 @@ export default function NewInvoice() {
       console.log('No items found, setting empty array');
       setItems([]);
     }
+
+    // Recalculate totals after updating items
+    calculateTotals();
   };
 
   const handleOpenShareDialog = () => {
@@ -277,7 +374,7 @@ export default function NewInvoice() {
       return;
     }
 
-    const { subtotal, tax, total } = calculateTotals();
+    const { subtotal, tax, total, balanceDue } = calculateTotals();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("Not authenticated");
 
@@ -307,28 +404,41 @@ export default function NewInvoice() {
       status: invoiceStatus
     };
 
-    // Check if this is a paid invoice with changes
-    if (existingInvoiceId && invoiceStatus === 'paid') {
-      const { data: currentInvoice } = await supabase
-        .from('invoices')
-        .select('total')
-        .eq('id', existingInvoiceId)
-        .single();
+    // Check conditions for status change
+    if (existingInvoiceId) {
+      // First check: Paid invoice with changes
+      if (invoiceStatus === 'paid') {
+        const { data: currentInvoice } = await supabase
+          .from('invoices')
+          .select('total')
+          .eq('id', existingInvoiceId)
+          .single();
 
-      if (currentInvoice && currentInvoice.total !== total) {
+        if (currentInvoice && currentInvoice.total !== total) {
+          setPendingInvoiceChanges({
+            ...invoiceData,
+            status: 'draft'
+          });
+          setShowStatusChangeDialog(true);
+          return;
+        }
+      }
+      
+      // Second check: Balance due greater than zero
+      if (balanceDue > 0 && invoiceStatus !== 'draft') {
         setPendingInvoiceChanges({
           ...invoiceData,
-          status: 'draft'
+          status: 'open'
         });
         setShowStatusChangeDialog(true);
         return;
       }
     }
 
-    await saveInvoice(subtotal, tax, total);
+    await saveInvoice(subtotal, tax, total, balanceDue);
   };
 
-  const saveInvoice = async (subtotal: number, tax: number, total: number) => {
+  const saveInvoice = async (subtotal: number, tax: number, total: number, balanceDue: number) => {
     setIsLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -342,6 +452,8 @@ export default function NewInvoice() {
 
       if (!businessProfile) throw new Error("Business profile not found");
 
+      const newStatus = pendingInvoiceChanges?.status || invoiceStatus;
+      
       const invoiceData = {
         business_id: businessProfile.id,
         customer_id: selectedCustomer,
@@ -356,7 +468,7 @@ export default function NewInvoice() {
         amount_paid: amountPaid,
         balance_due: balanceDue,
         is_tax_inclusive: isTaxInclusive,
-        status: invoiceStatus
+        status: newStatus
       };
 
       let invoiceId: string;
@@ -431,11 +543,13 @@ export default function NewInvoice() {
       }];
 
       // Add status change activity if applicable
-      if (existingInvoiceId && invoiceStatus === 'draft' && pendingInvoiceChanges) {
+      if (existingInvoiceId && newStatus !== invoiceStatus) {
         activityEntries.push({
           invoice_id: invoiceId,
           activity_type: 'status_change',
-          description: 'Invoice status changed from paid to draft due to modifications',
+          description: `Invoice status changed from ${invoiceStatus} to ${newStatus} due to ${
+            newStatus === 'draft' ? 'modifications' : 'balance due'
+          }`,
           performed_by: user.id
         });
       }
@@ -446,6 +560,9 @@ export default function NewInvoice() {
 
       if (activityError) throw activityError;
 
+      // Update local state to reflect new status
+      setInvoiceStatus(newStatus);
+      
       // Refresh invoice data
       await refreshInvoiceData(invoiceId);
 
@@ -520,19 +637,6 @@ export default function NewInvoice() {
     }
     
     setItems(newItems);
-  };
-
-  const calculateTotals = () => {
-    const subtotal = items.reduce((sum, item) => sum + (parseFloat(item.amount.toString()) || 0), 0);
-    const tax = isTaxInclusive ? (subtotal / 11) : (subtotal * 0.1);
-    const total = isTaxInclusive ? subtotal : (subtotal + tax);
-    return { 
-      subtotal: Number(subtotal.toFixed(2)), 
-      tax: Number(tax.toFixed(2)), 
-      total: Number(total.toFixed(2)),
-      amountPaid: Number(amountPaid.toFixed(2)),
-      balanceDue: Number(balanceDue.toFixed(2))
-    };
   };
 
   const totals = calculateTotals();
@@ -822,15 +926,15 @@ export default function NewInvoice() {
           <div className="w-64 space-y-2">
             <div className="flex justify-between py-1">
               <span>Subtotal</span>
-              <span>${totals.subtotal.toFixed(2)}</span>
+              <span>${calculateTotals().subtotal.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span>Tax</span>
-              <span>${totals.tax.toFixed(2)}</span>
+              <span>${calculateTotals().tax.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1 font-semibold">
               <span>Total</span>
-              <span>${totals.total.toFixed(2)}</span>
+              <span>${calculateTotals().total.toFixed(2)}</span>
             </div>
             <div className="flex justify-between py-1">
               <span>Amount paid</span>
@@ -916,54 +1020,4 @@ export default function NewInvoice() {
             <div className="space-y-2">
               <Label>Message (optional)</Label>
               <Textarea
-                placeholder="Add a message to your invoice"
-                value={shareMessage}
-                onChange={(e) => setShareMessage(e.target.value)}
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={handleCloseShareDialog}>
-              Cancel
-            </Button>
-            <Button onClick={handleShareInvoice} disabled={isSending}>
-              {isSending ? "Sending..." : "Send Invoice"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-      <AlertDialog open={showStatusChangeDialog} onOpenChange={setShowStatusChangeDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Change Invoice Status</AlertDialogTitle>
-            <AlertDialogDescription>
-              This invoice is currently marked as paid. Making changes will set its status to draft. 
-              Do you want to proceed with these changes?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => setShowStatusChangeDialog(false)}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={async () => {
-                setShowStatusChangeDialog(false);
-                if (pendingInvoiceChanges) {
-                  setInvoiceStatus('draft');
-                  await saveInvoice(
-                    pendingInvoiceChanges.subtotal,
-                    pendingInvoiceChanges.tax,
-                    pendingInvoiceChanges.total
-                  );
-                }
-              }}
-            >
-              Continue
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </div>
-  );
-}
+                placeholder="Add a message to
