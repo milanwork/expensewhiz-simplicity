@@ -47,11 +47,17 @@ export default function Invoices() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [customers, setCustomers] = useState<Array<{ id: string; name: string }>>([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  // Get first day of current month
+  const firstDayOfMonth = new Date();
+  firstDayOfMonth.setDate(1); // Set to first day of current month
+  firstDayOfMonth.setHours(0, 0, 0, 0); // Set time to midnight
+
   const [filters, setFilters] = useState<FilterState>({
     status: 'all',
     customer: 'all',
     period: 'custom',
-    dateFrom: new Date().toISOString().split('T')[0],
+    dateFrom: firstDayOfMonth.toISOString().split('T')[0], // Set to first day of month
     dateTo: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
     search: '',
   });
